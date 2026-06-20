@@ -5,6 +5,7 @@ import '../../features/menu/domain/menu_repository.dart';
 import '../../features/orders/data/order_repository_impl.dart';
 import '../../features/orders/domain/order_repository.dart';
 import '../../features/printer/data/printer_repository_impl.dart';
+import '../../features/printer/domain/printer_connection_monitor.dart';
 import '../../features/printer/domain/printer_repository.dart';
 import '../../features/products/data/product_repository_impl.dart';
 import '../../features/products/domain/product_repository.dart';
@@ -38,7 +39,11 @@ void configureDependencies() {
   sl.registerLazySingleton<ReportRepository>(
       () => ReportRepositoryImpl(db.reportDao));
   sl.registerLazySingleton<SettingsRepository>(() => SettingsRepositoryImpl());
-  sl.registerLazySingleton<PrinterRepository>(() => PrinterRepositoryImpl());
+  // Monitor global do estado de conexão da impressora (singleton para que a
+  // UI e o repositório compartilhem a mesma instância observável).
+  sl.registerSingleton<PrinterConnectionMonitor>(PrinterConnectionMonitor());
+  sl.registerLazySingleton<PrinterRepository>(
+      () => PrinterRepositoryImpl(sl<PrinterConnectionMonitor>()));
 
   // Cubit global de configurações (controla o tema)
   sl.registerLazySingleton<SettingsCubit>(

@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/home/presentation/home_page.dart';
@@ -9,7 +10,12 @@ import '../../features/reports/presentation/reports_page.dart';
 import '../../features/settings/presentation/settings_page.dart';
 import '../../features/stock/presentation/stock_page.dart';
 
+/// Chave do navigator raiz, usada para exibir diálogos globais (ex.: alerta
+/// de queda de conexão com a impressora) a partir de fora da árvore de telas.
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
 final appRouter = GoRouter(
+  navigatorKey: rootNavigatorKey,
   initialLocation: '/',
   routes: [
     GoRoute(path: '/', builder: (context, state) => const HomePage()),

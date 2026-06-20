@@ -137,6 +137,7 @@ class _PrinterSelector extends StatelessWidget {
           const SizedBox(height: 8),
           DropdownButtonFormField<PrinterDevice?>(
             initialValue: selected,
+            isExpanded: true,
             decoration: const InputDecoration(labelText: 'Dispositivo bluetooth'),
             items: [
               const DropdownMenuItem<PrinterDevice?>(value: null, child: Text('Nenhuma')),

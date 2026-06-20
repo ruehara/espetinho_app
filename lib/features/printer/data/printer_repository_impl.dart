@@ -1,25 +1,48 @@
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/utils/formatters.dart';
 import '../../orders/domain/order_entities.dart';
 import '../../products/domain/product_entities.dart';
+import '../domain/printer_connection_monitor.dart';
 import '../domain/printer_entities.dart';
 import '../domain/printer_repository.dart';
 
 class PrinterRepositoryImpl implements PrinterRepository {
+  PrinterRepositoryImpl(this._monitor);
+
+  /// Monitor global que acompanha o resultado das tentativas de impressão
+  /// para alertar a interface quando a conexão com a impressora cai.
+  final PrinterConnectionMonitor _monitor;
+
   static const _kKitchenName = 'printer_kitchen_name';
   static const _kKitchenAddress = 'printer_kitchen_address';
   static const _kHallName = 'printer_hall_name';
   static const _kHallAddress = 'printer_hall_address';
   static const _kPaperSize = 'printer_paper_size';
 
+  /// Solicita, em tempo de execução, as permissões de Bluetooth necessárias
+  /// no Android 12+ (API 31). Sem elas, listar dispositivos pareados e
+  /// conectar à impressora falham silenciosamente. No Windows essas
+  /// permissões não existem e [request] simplesmente retorna concedido.
+  Future<void> _ensureBluetoothPermissions() async {
+    await [
+      Permission.bluetoothConnect,
+      Permission.bluetoothScan,
+    ].request();
+  }
+
   @override
-  Future<bool> isBluetoothEnabled() => PrintBluetoothThermal.bluetoothEnabled;
+  Future<bool> isBluetoothEnabled() async {
+    await _ensureBluetoothPermissions();
+    return PrintBluetoothThermal.bluetoothEnabled;
+  }
 
   @override
   Future<List<PrinterDevice>> pairedDevices() async {
+    await _ensureBluetoothPermissions();
     final devices = await PrintBluetoothThermal.pairedBluetooths;
     return devices
         .map((d) => PrinterDevice(name: d.name, address: d.macAdress))
@@ -87,6 +110,8 @@ class PrinterRepositoryImpl implements PrinterRepository {
     bytes.addAll(generator.text('Conexao OK!', styles: const PosStyles(align: PosAlign.center)));
     bytes.addAll(generator.feed(2));
     bytes.addAll(generator.cut());
+    // A página de teste não tem conteúdo a recuperar: se a impressão falhar,
+    // basta o alerta de conexão, sem reexibir um documento.
     return _print(device, bytes);
   }
 
@@ -100,13 +125,13 @@ class PrinterRepositoryImpl implements PrinterRepository {
     final config = await loadConfig();
     final printer = config.kitchenPrinter;
     if (printer == null) return 'Impressora da cozinha não configurada.';
-    final bytes = await _buildComanda(
+    final doc = await _buildComanda(
       title: 'COMANDA - COZINHA',
       customerName: customerName,
       items: kitchenItems,
       paperSize: config.paperSize,
     );
-    return _print(printer, bytes);
+    return _print(printer, doc.bytes, documentText: doc.text);
   }
 
   @override
@@ -120,14 +145,14 @@ class PrinterRepositoryImpl implements PrinterRepository {
     final config = await loadConfig();
     final printer = config.hallPrinter;
     if (printer == null) return 'Impressora do salão não configurada.';
-    final bytes = await _buildComanda(
+    final doc = await _buildComanda(
       title: 'COMANDA - SALAO',
       customerName: customerName,
       items: hallItems,
       paperSize: config.paperSize,
       comboLines: comboLines,
     );
-    return _print(printer, bytes);
+    return _print(printer, doc.bytes, documentText: doc.text);
   }
 
   /// Filtra os itens cujo local de preparo do produto corresponde ao
@@ -175,16 +200,24 @@ class PrinterRepositoryImpl implements PrinterRepository {
     if (printer == null) return 'Nenhuma impressora configurada.';
     final generator = await _generator(config.paperSize);
     final bytes = <int>[];
+    final text = StringBuffer();
 
+    final paperSize = config.paperSize;
     bytes.addAll(generator.text(
       storeName,
       styles: const PosStyles(align: PosAlign.center, bold: true, height: PosTextSize.size2),
     ));
+    text.writeln(_center(storeName, paperSize));
     bytes.addAll(generator.text('CONTA', styles: const PosStyles(align: PosAlign.center)));
+    text.writeln(_center('CONTA', paperSize));
     bytes.addAll(generator.hr());
+    text.writeln(_divider(paperSize));
     bytes.addAll(generator.text('Cliente: ${order.customerName}'));
+    text.writeln('Cliente: ${order.customerName}');
     bytes.addAll(generator.text('Data: ${dateTimeLabel(order.openedAt)}'));
+    text.writeln('Data: ${dateTimeLabel(order.openedAt)}');
     bytes.addAll(generator.hr());
+    text.writeln(_divider(paperSize));
 
     final gross = items.fold(0.0, (s, i) => s + i.lineTotal);
     for (final item in items) {
@@ -193,20 +226,25 @@ class PrinterRepositoryImpl implements PrinterRepository {
         PosColumn(
             text: money(item.lineTotal), width: 4, styles: const PosStyles(align: PosAlign.right)),
       ]));
+      text.writeln(_twoColumns(
+          '${qty(item.quantity)}x ${item.product.name}', money(item.lineTotal), paperSize));
       for (final choice in item.choices) {
         final label = choice.choiceType == 'removal'
             ? '  sem ${choice.selectedProductName}'
             : '  ${choice.selectedProductName}';
         bytes.addAll(generator.text(label, styles: const PosStyles(height: PosTextSize.size1)));
+        text.writeln(label);
       }
     }
     bytes.addAll(generator.hr());
+    text.writeln(_divider(paperSize));
 
     if (order.discountPercent > 0) {
       bytes.addAll(generator.row([
         PosColumn(text: 'Subtotal', width: 8),
         PosColumn(text: money(gross), width: 4, styles: const PosStyles(align: PosAlign.right)),
       ]));
+      text.writeln(_twoColumns('Subtotal', money(gross), paperSize));
       bytes.addAll(generator.row([
         PosColumn(text: 'Desconto (${order.discountPercent}%)', width: 8),
         PosColumn(
@@ -214,6 +252,8 @@ class PrinterRepositoryImpl implements PrinterRepository {
             width: 4,
             styles: const PosStyles(align: PosAlign.right)),
       ]));
+      text.writeln(_twoColumns(
+          'Desconto (${order.discountPercent}%)', '-${money(gross - order.total)}', paperSize));
     }
     bytes.addAll(generator.row([
       PosColumn(
@@ -225,13 +265,15 @@ class PrinterRepositoryImpl implements PrinterRepository {
           width: 4,
           styles: const PosStyles(bold: true, height: PosTextSize.size2, align: PosAlign.right)),
     ]));
+    text.writeln(_twoColumns('TOTAL', money(order.total), paperSize));
     bytes.addAll(generator.feed(1));
     bytes.addAll(generator.text('Obrigado pela visita!',
         styles: const PosStyles(align: PosAlign.center)));
+    text.writeln(_center('Obrigado pela visita!', paperSize));
     bytes.addAll(generator.feed(2));
     bytes.addAll(generator.cut());
 
-    return _print(printer, bytes);
+    return _print(printer, bytes, documentText: text.toString().trimRight());
   }
 
   @override
@@ -244,21 +286,22 @@ class PrinterRepositoryImpl implements PrinterRepository {
     final config = await loadConfig();
     final printer = config.kitchenPrinter;
     if (printer == null) return 'Impressora da cozinha não configurada.';
-    final bytes = await _buildCancellationComanda(
+    final doc = await _buildCancellationComanda(
       customerName: customerName,
       items: kitchenItems,
       paperSize: config.paperSize,
     );
-    return _print(printer, bytes);
+    return _print(printer, doc.bytes, documentText: doc.text);
   }
 
-  Future<List<int>> _buildCancellationComanda({
+  Future<_PrintDoc> _buildCancellationComanda({
     required String customerName,
     required List<CartItem> items,
     required PrinterPaperSize paperSize,
   }) async {
     final generator = await _generator(paperSize);
     final bytes = <int>[];
+    final text = StringBuffer();
 
     bytes.addAll(generator.text(
       '*** CANCELAMENTO / AJUSTE ***',
@@ -269,30 +312,37 @@ class PrinterRepositoryImpl implements PrinterRepository {
         width: PosTextSize.size2,
       ),
     ));
+    text.writeln(_center('*** CANCELAMENTO / AJUSTE ***', paperSize));
     bytes.addAll(generator.text('Cliente: $customerName', styles: const PosStyles(bold: true)));
+    text.writeln('Cliente: $customerName');
     bytes.addAll(generator.text(dateTimeLabel(DateTime.now())));
+    text.writeln(dateTimeLabel(DateTime.now()));
     bytes.addAll(generator.hr());
+    text.writeln(_divider(paperSize));
 
     for (final item in items) {
       bytes.addAll(generator.text(
         'NAO PREPARAR: ${qty(item.quantity)}x ${item.product.name}',
         styles: const PosStyles(bold: true, height: PosTextSize.size2, width: PosTextSize.size2),
       ));
+      text.writeln('NAO PREPARAR: ${qty(item.quantity)}x ${item.product.name}');
       for (final choice in item.choices) {
         final label = choice.choiceType == 'removal'
             ? '   >> SEM ${choice.selectedProductName.toUpperCase()}'
             : '   >> ${choice.selectedProductName}';
         bytes.addAll(generator.text(label, styles: const PosStyles(bold: true)));
+        text.writeln(label);
       }
       bytes.addAll(generator.hr());
+      text.writeln(_divider(paperSize));
     }
 
     bytes.addAll(generator.feed(2));
     bytes.addAll(generator.cut());
-    return bytes;
+    return _PrintDoc(bytes: bytes, text: text.toString().trimRight());
   }
 
-  Future<List<int>> _buildComanda({
+  Future<_PrintDoc> _buildComanda({
     required String title,
     required String customerName,
     required List<CartItem> items,
@@ -301,6 +351,7 @@ class PrinterRepositoryImpl implements PrinterRepository {
   }) async {
     final generator = await _generator(paperSize);
     final bytes = <int>[];
+    final text = StringBuffer();
 
     bytes.addAll(generator.text(
       title,
@@ -311,22 +362,29 @@ class PrinterRepositoryImpl implements PrinterRepository {
         width: PosTextSize.size2,
       ),
     ));
+    text.writeln(_center(title, paperSize));
     bytes.addAll(generator.text('Cliente: $customerName', styles: const PosStyles(bold: true)));
+    text.writeln('Cliente: $customerName');
     bytes.addAll(generator.text(dateTimeLabel(DateTime.now())));
+    text.writeln(dateTimeLabel(DateTime.now()));
     bytes.addAll(generator.hr());
+    text.writeln(_divider(paperSize));
 
     for (final item in items) {
       bytes.addAll(generator.text(
         '${qty(item.quantity)}x ${item.product.name}',
         styles: const PosStyles(bold: true, height: PosTextSize.size2, width: PosTextSize.size2),
       ));
+      text.writeln('${qty(item.quantity)}x ${item.product.name}');
       for (final choice in item.choices) {
         final label = choice.choiceType == 'removal'
             ? '   >> SEM ${choice.selectedProductName.toUpperCase()}'
             : '   >> ${choice.selectedProductName}';
         bytes.addAll(generator.text(label, styles: const PosStyles(bold: true)));
+        text.writeln(label);
       }
       bytes.addAll(generator.hr());
+      text.writeln(_divider(paperSize));
     }
 
     if (comboLines.isNotEmpty) {
@@ -334,19 +392,23 @@ class PrinterRepositoryImpl implements PrinterRepository {
         'BEBIDAS DE COMBOS',
         styles: const PosStyles(align: PosAlign.center, bold: true),
       ));
+      text.writeln(_center('BEBIDAS DE COMBOS', paperSize));
       for (final line in comboLines) {
         bytes.addAll(generator.text(
           '${qty(line.quantity)}x ${line.choiceName}',
           styles: const PosStyles(bold: true, height: PosTextSize.size2, width: PosTextSize.size2),
         ));
+        text.writeln('${qty(line.quantity)}x ${line.choiceName}');
         bytes.addAll(generator.text('   (do combo ${line.comboName})'));
+        text.writeln('   (do combo ${line.comboName})');
         bytes.addAll(generator.hr());
+        text.writeln(_divider(paperSize));
       }
     }
 
     bytes.addAll(generator.feed(2));
     bytes.addAll(generator.cut());
-    return bytes;
+    return _PrintDoc(bytes: bytes, text: text.toString().trimRight());
   }
 
   Future<Generator> _generator(PrinterPaperSize paperSize) async {
@@ -355,17 +417,75 @@ class PrinterRepositoryImpl implements PrinterRepository {
     return Generator(size, profile);
   }
 
-  Future<String?> _print(PrinterDevice device, List<int> bytes) async {
+  /// Número de caracteres por linha da impressora térmica na fonte padrão:
+  /// 32 colunas no papel de 58mm e 48 no de 80mm. Usado para formatar o
+  /// preview de texto exatamente com a largura que seria impressa.
+  int _lineWidth(PrinterPaperSize paperSize) =>
+      paperSize == PrinterPaperSize.mm58 ? 32 : 48;
+
+  /// Linha divisória com a largura total do papel (equivalente ao `hr()`).
+  String _divider(PrinterPaperSize paperSize) => '-' * _lineWidth(paperSize);
+
+  /// Centraliza [value] na largura do papel (equivalente ao texto centralizado
+  /// da impressora). Trunca se for maior que a linha.
+  String _center(String value, PrinterPaperSize paperSize) {
+    final width = _lineWidth(paperSize);
+    if (value.length >= width) return value.substring(0, width);
+    final left = (width - value.length) ~/ 2;
+    return (' ' * left) + value;
+  }
+
+  /// Monta uma linha de duas colunas com [left] à esquerda e [right] alinhado
+  /// à direita, preenchendo o miolo com espaços — como o `row()` da impressora.
+  /// Se não couber na mesma linha, quebra o rótulo e alinha o valor abaixo.
+  String _twoColumns(String left, String right, PrinterPaperSize paperSize) {
+    final width = _lineWidth(paperSize);
+    if (left.length + 1 + right.length <= width) {
+      final gap = width - left.length - right.length;
+      return left + (' ' * gap) + right;
+    }
+    final pad = right.length >= width ? '' : ' ' * (width - right.length);
+    return '$left\n$pad$right';
+  }
+
+  /// Tenta imprimir [bytes] na [device]. Em caso de queda de conexão, reporta
+  /// a falha ao monitor junto de [documentText] (a versão legível do que seria
+  /// impresso) para que o operador possa ver/anotar o conteúdo perdido.
+  Future<String?> _print(
+    PrinterDevice device,
+    List<int> bytes, {
+    String? documentText,
+  }) async {
+    await _ensureBluetoothPermissions();
     final connected = await PrintBluetoothThermal.connect(macPrinterAddress: device.address);
-    if (!connected) return 'Não foi possível conectar à impressora "${device.name}".';
+    if (!connected) {
+      final error = 'Não foi possível conectar à impressora "${device.name}".';
+      _monitor.reportFailure(error, documentText: documentText);
+      return error;
+    }
     try {
       final ok = await PrintBluetoothThermal.writeBytes(bytes);
-      if (!ok) return 'Falha ao enviar dados para a impressora "${device.name}".';
+      if (!ok) {
+        final error = 'Falha ao enviar dados para a impressora "${device.name}".';
+        _monitor.reportFailure(error, documentText: documentText);
+        return error;
+      }
+      _monitor.reportSuccess();
       return null;
     } finally {
       await PrintBluetoothThermal.disconnect;
     }
   }
+}
+
+/// Documento pronto para impressão: os [bytes] enviados à impressora térmica
+/// e uma versão [text] legível do mesmo conteúdo, exibida ao operador quando
+/// a impressora está indisponível.
+class _PrintDoc {
+  _PrintDoc({required this.bytes, required this.text});
+
+  final List<int> bytes;
+  final String text;
 }
 
 /// Linha auxiliar para destacar, na comanda do destino correto, a escolha
