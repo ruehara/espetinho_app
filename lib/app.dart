@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/di/injector.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/select_all_on_focus.dart';
 import 'features/printer/domain/printer_connection_monitor.dart';
 import 'features/printer/presentation/printer_connection_guard.dart';
 import 'features/settings/domain/settings_repository.dart';
@@ -33,9 +34,11 @@ class RestauranteApp extends StatelessWidget {
             ],
             supportedLocales: const [Locale('pt', 'BR'), Locale('en')],
             routerConfig: appRouter,
-            builder: (context, child) => PrinterConnectionGuard(
-              monitor: sl<PrinterConnectionMonitor>(),
-              child: child ?? const SizedBox.shrink(),
+            builder: (context, child) => SelectAllOnFocus(
+              child: PrinterConnectionGuard(
+                monitor: sl<PrinterConnectionMonitor>(),
+                child: child ?? const SizedBox.shrink(),
+              ),
             ),
           );
         },

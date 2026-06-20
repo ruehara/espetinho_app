@@ -457,23 +457,74 @@ class PrinterRepositoryImpl implements PrinterRepository {
     String? documentText,
   }) async {
     await _ensureBluetoothPermissions();
-    final connected = await PrintBluetoothThermal.connect(macPrinterAddress: device.address);
-    if (!connected) {
-      final error = 'Não foi possível conectar à impressora "${device.name}".';
-      _monitor.reportFailure(error, documentText: documentText);
-      return error;
+
+    final connectError =
+        'Não foi possível conectar à impressora "${device.name}". '
+        'Verifique se ela está ligada, pareada e ao alcance.';
+    final writeError = 'Falha ao enviar dados para a impressora "${device.name}".';
+
+    // No Windows a biblioteca usa BLE (win_ble) e guarda o estado da conexão
+    // em variáveis estáticas globais. Se uma impressão anterior caiu no meio,
+    // esse estado pode ficar "grudado" e fazer connect() retornar true sem de
+    // fato reconectar — o que mascararia uma impressora desligada como sucesso.
+    // Por isso desconectamos antes de tentar, forçando uma conexão limpa.
+    try {
+      await PrintBluetoothThermal.disconnect;
+    } catch (_) {
+      // Sem conexão prévia para encerrar; segue para a tentativa de conexão.
+    }
+
+    bool connected;
+    try {
+      connected = await PrintBluetoothThermal.connect(
+        macPrinterAddress: device.address,
+      ).timeout(
+        const Duration(seconds: 5),
+        // Se o win_ble pendurar (impressora desligada não responde ao BLE),
+        // não deixamos o app travar: tratamos como falha de conexão. Uma
+        // conexão bem-sucedida normalmente leva 1-3s, então 5s dá margem sem
+        // fazer o operador esperar muito até ver o aviso e o conteúdo perdido.
+        onTimeout: () => false,
+      );
+    } catch (e) {
+      // Impressoras Bluetooth Clássico ou desligadas lançam "Device not found".
+      _monitor.reportFailure(connectError, documentText: documentText);
+      return connectError;
+    }
+    // connect() pode retornar true sem haver de fato uma conexão utilizável
+    // (bug conhecido da lib no Windows). Confirmamos pelo estado real antes de
+    // tentar enviar dados, para que uma impressora desligada não passe como ok.
+    if (!connected || !await _isReallyConnected()) {
+      _monitor.reportFailure(connectError, documentText: documentText);
+      return connectError;
     }
     try {
       final ok = await PrintBluetoothThermal.writeBytes(bytes);
       if (!ok) {
-        final error = 'Falha ao enviar dados para a impressora "${device.name}".';
-        _monitor.reportFailure(error, documentText: documentText);
-        return error;
+        _monitor.reportFailure(writeError, documentText: documentText);
+        return writeError;
       }
       _monitor.reportSuccess();
       return null;
+    } catch (e) {
+      _monitor.reportFailure(writeError, documentText: documentText);
+      return writeError;
     } finally {
-      await PrintBluetoothThermal.disconnect;
+      try {
+        await PrintBluetoothThermal.disconnect;
+      } catch (_) {
+        // Desconexão pode falhar se a conexão já caiu; ignoramos.
+      }
+    }
+  }
+
+  /// Confirma que há uma conexão de fato estabelecida com a impressora,
+  /// independentemente do retorno (potencialmente otimista) de `connect()`.
+  Future<bool> _isReallyConnected() async {
+    try {
+      return await PrintBluetoothThermal.connectionStatus;
+    } catch (_) {
+      return false;
     }
   }
 }

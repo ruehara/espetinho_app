@@ -160,7 +160,17 @@ class OrderDao extends DatabaseAccessor<AppDatabase> with _$OrderDaoMixin {
   Future<void> recordPrinted(List<OrderPrintLogsCompanion> entries) {
     return transaction(() async {
       for (final entry in entries) {
-        await into(orderPrintLogs).insertOnConflictUpdate(entry);
+        await into(orderPrintLogs).insert(
+          entry,
+          onConflict: DoUpdate(
+            (old) => entry.copyWith(updatedAt: Value(DateTime.now())),
+            target: [
+              orderPrintLogs.orderId,
+              orderPrintLogs.kind,
+              orderPrintLogs.signature,
+            ],
+          ),
+        );
       }
     });
   }

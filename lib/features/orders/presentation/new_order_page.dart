@@ -409,6 +409,11 @@ Future<CartItem?> _configureItem(BuildContext context, NewOrderCubit cubit,
   final selections = <int, List<CartChoice>>{};
   final removals = <int>{}; // ingredientId removidos
 
+  // Quando o operador tenta adicionar sem cumprir o mínimo de algum grupo,
+  // passa a destacar em vermelho os grupos pendentes (em vez de adicionar
+  // silenciosamente um item incompleto, ex.: espeto sem sabor escolhido).
+  var showErrors = false;
+
   return showDialog<CartItem>(
     context: context,
     builder: (ctx) {
@@ -416,12 +421,24 @@ Future<CartItem?> _configureItem(BuildContext context, NewOrderCubit cubit,
         builder: (ctx, setState) {
           final removableItems =
               detail.recipeItems.where((r) => r.isOptional).toList();
+
+          // Índices dos grupos que ainda não atingiram o mínimo de seleções.
+          List<int> missingGroups() => [
+                for (var gi = 0; gi < detail.choiceGroups.length; gi++)
+                  if ((selections[gi]?.length ?? 0) <
+                      detail.choiceGroups[gi].minSelections)
+                    gi,
+              ];
+
           return DraftSheet(
             title: product.name,
             children: [
               for (var gi = 0; gi < detail.choiceGroups.length; gi++)
                 _buildGroup(ctx, setState, detail.choiceGroups[gi], gi,
-                    sourceProducts, manualProducts, selections, outOfStockIds),
+                    sourceProducts, manualProducts, selections, outOfStockIds,
+                    showError: showErrors &&
+                        (selections[gi]?.length ?? 0) <
+                            detail.choiceGroups[gi].minSelections),
               if (removableItems.isNotEmpty) ...[
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
@@ -445,6 +462,19 @@ Future<CartItem?> _configureItem(BuildContext context, NewOrderCubit cubit,
               const SizedBox(height: 12),
               FilledButton(
                 onPressed: () {
+                  final missing = missingGroups();
+                  if (missing.isNotEmpty) {
+                    // Não adiciona um item incompleto: destaca os grupos
+                    // pendentes e avisa o operador quais faltam.
+                    setState(() => showErrors = true);
+                    final names = missing
+                        .map((gi) => detail.choiceGroups[gi].name)
+                        .join(', ');
+                    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                      content: Text('Selecione: $names'),
+                    ));
+                    return;
+                  }
                   final choices = <CartChoice>[
                     for (final list in selections.values) ...list,
                     for (final r in removableItems.where((r) => removals.contains(r.ingredientId)))
@@ -482,8 +512,9 @@ Widget _buildGroup(
   Map<int, List<Product>> sourceProducts,
   Map<int, Product> manualProducts,
   Map<int, List<CartChoice>> selections,
-  Set<int> outOfStockIds,
-) {
+  Set<int> outOfStockIds, {
+  bool showError = false,
+}) {
   // Monta as opções: produtos dos grupos-fonte OU opções enumeradas manualmente.
   final options = <CartChoice>[];
   if (group.sourceGroupIds.isNotEmpty) {
@@ -543,9 +574,22 @@ Widget _buildGroup(
         padding: const EdgeInsets.only(top: 8),
         child: Text(
           '${group.name}  (mín ${group.minSelections} / máx ${group.maxSelections})',
-          style: const TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: showError ? Theme.of(context).colorScheme.error : null,
+          ),
         ),
       ),
+      if (showError)
+        Text(
+          group.minSelections == 1
+              ? 'Selecione 1 opção.'
+              : 'Selecione ao menos ${group.minSelections} opções.',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.error,
+            fontSize: 12,
+          ),
+        ),
       for (final option in options)
         if (single)
           RadioListTile<String>(
