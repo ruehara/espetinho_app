@@ -68,14 +68,16 @@ class ReportDao extends DatabaseAccessor<AppDatabase> with _$ReportDaoMixin {
       "SELECT oi.product_id AS pid, oi.product_name AS pname, "
       "SUM(oi.quantity) AS qty, SUM(oi.unit_price*oi.quantity) AS rev "
       "FROM order_items oi JOIN orders o ON o.id = oi.order_id "
+      "JOIN products p ON p.id = oi.product_id "
       "WHERE o.status='closed' AND o.closed_at BETWEEN ? AND ? "
+      "AND p.track_stock = 1 "
       "GROUP BY oi.product_id, oi.product_name ORDER BY qty DESC LIMIT ?",
       variables: [
         Variable<DateTime>(from),
         Variable<DateTime>(to),
         Variable<int>(limit),
       ],
-      readsFrom: {orderItems, orders},
+      readsFrom: {orderItems, orders, products},
     ).get();
     return rows
         .map((r) => TopProduct(r.read<int>('pid'), r.read<String>('pname'),
@@ -97,9 +99,11 @@ class ReportDao extends DatabaseAccessor<AppDatabase> with _$ReportDaoMixin {
     return ProfitSummary(row.read<double>('rev'), row.read<double>('cost'));
   }
 
-  /// Posição de estoque (produtos não compostos, com quantidade e mínimo).
+  /// Posição de estoque (produtos não compostos que controlam estoque, com
+  /// quantidade e mínimo). Produtos com `track_stock = false` não têm estoque
+  /// validado, então são omitidos do relatório.
   Future<List<ProductRow>> stockPosition() => (select(products)
-        ..where((p) => p.isComposite.equals(false))
+        ..where((p) => p.isComposite.equals(false) & p.trackStock.equals(true))
         ..orderBy([(p) => OrderingTerm(expression: p.name)]))
       .get();
 }

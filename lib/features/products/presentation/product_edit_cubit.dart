@@ -11,6 +11,7 @@ class ProductEditState extends Equatable {
     this.saving = false,
     this.draft = const ProductDetail(),
     this.ingredients = const [],
+    this.espetos = const [],
     this.groups = const [],
     this.saved = false,
     this.error,
@@ -20,6 +21,7 @@ class ProductEditState extends Equatable {
   final bool saving;
   final ProductDetail draft;
   final List<Product> ingredients;
+  final List<Product> espetos;
   final List<ProductGroup> groups;
   final bool saved;
   final String? error;
@@ -29,6 +31,7 @@ class ProductEditState extends Equatable {
     bool? saving,
     ProductDetail? draft,
     List<Product>? ingredients,
+    List<Product>? espetos,
     List<ProductGroup>? groups,
     bool? saved,
     String? error,
@@ -38,6 +41,7 @@ class ProductEditState extends Equatable {
         saving: saving ?? this.saving,
         draft: draft ?? this.draft,
         ingredients: ingredients ?? this.ingredients,
+        espetos: espetos ?? this.espetos,
         groups: groups ?? this.groups,
         saved: saved ?? this.saved,
         error: error,
@@ -45,7 +49,7 @@ class ProductEditState extends Equatable {
 
   @override
   List<Object?> get props =>
-      [loading, saving, draft, ingredients, groups, saved, error];
+      [loading, saving, draft, ingredients, espetos, groups, saved, error];
 }
 
 class ProductEditCubit extends Cubit<ProductEditState> {
@@ -55,6 +59,7 @@ class ProductEditCubit extends Cubit<ProductEditState> {
 
   Future<void> load(int? id) async {
     final ingredients = await _repository.getIngredients();
+    final espetos = await _repository.getEspetos();
     final groups = await _repository.getGroups();
     var draft = const ProductDetail();
     if (id != null) {
@@ -67,6 +72,7 @@ class ProductEditCubit extends Cubit<ProductEditState> {
       loading: false,
       draft: draft,
       ingredients: ingredients,
+      espetos: espetos,
       groups: groups,
     ));
   }
@@ -96,6 +102,14 @@ class ProductEditCubit extends Cubit<ProductEditState> {
     final draft = state.draft;
     if (draft.name.trim().isEmpty || draft.groupId == null) {
       emit(state.copyWith(error: 'Informe nome e grupo do produto.'));
+      return false;
+    }
+    if (!draft.isInternalUse &&
+        draft.trackStock &&
+        (draft.costPrice <= 0 || draft.salePrice == null || draft.salePrice! <= 0)) {
+      emit(state.copyWith(
+          error:
+              'Informe os preços de custo e de venda para produtos com controle de estoque.'));
       return false;
     }
     emit(state.copyWith(saving: true, error: null));

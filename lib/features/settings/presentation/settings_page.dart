@@ -29,6 +29,15 @@ class SettingsPage extends StatelessWidget {
                 decoration: const InputDecoration(labelText: 'Desconto padrão (%)'),
                 onChanged: (v) => cubit.setDefaultDiscount(int.tryParse(v) ?? 0),
               ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Exibir desconto no fechamento'),
+                subtitle: const Text(
+                    'Mostra o campo de desconto ao fechar o pedido.'),
+                value: settings.showDiscountOnClose,
+                onChanged: cubit.setShowDiscountOnClose,
+              ),
               const SizedBox(height: 24),
               const Text('Tema', style: TextStyle(fontWeight: FontWeight.bold)),
               RadioGroup<ThemeMode>(

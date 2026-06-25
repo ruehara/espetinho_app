@@ -23,6 +23,9 @@ class SettingsCubit extends Cubit<AppSettings> {
   Future<void> setDefaultDiscount(int discount) =>
       _update(state.copyWith(defaultDiscount: discount));
 
+  Future<void> setShowDiscountOnClose(bool show) =>
+      _update(state.copyWith(showDiscountOnClose: show));
+
   Future<void> setThemeMode(ThemeMode mode) =>
       _update(state.copyWith(themeMode: mode));
 }

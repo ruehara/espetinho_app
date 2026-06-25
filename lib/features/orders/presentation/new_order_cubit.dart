@@ -164,6 +164,17 @@ class NewOrderCubit extends Cubit<NewOrderState> {
     }
   }
 
+  /// Define (ou limpa) a observação livre de um item do carrinho.
+  Future<void> setItemNotes(int index, String? notes) async {
+    final trimmed = notes?.trim();
+    final items = [...state.items];
+    items[index] = trimmed == null || trimmed.isEmpty
+        ? items[index].copyWith(clearNotes: true)
+        : items[index].copyWith(notes: trimmed);
+    emit(state.copyWith(items: items));
+    await _persistItems();
+  }
+
   /// Adiciona o item ao pedido, validando o estoque disponível.
   ///
   /// Se já existir no carrinho um item com o mesmo produto e as mesmas
@@ -190,10 +201,29 @@ class NewOrderCubit extends Cubit<NewOrderState> {
     return null;
   }
 
+  /// Substitui o item na posição [index] por uma nova montagem (sabores,
+  /// adicionais, ingredientes removidos e observação), preservando a posição
+  /// no carrinho. Valida o estoque da nova configuração.
+  ///
+  /// Retorna uma mensagem de erro se o estoque for insuficiente, ou `null`
+  /// em caso de sucesso.
+  Future<String?> replaceItem(int index, CartItem item) async {
+    final insufficient = await _repository.checkStock(item);
+    if (insufficient.isNotEmpty) {
+      return 'Estoque insuficiente: ${insufficient.join(', ')}';
+    }
+    final items = [...state.items];
+    items[index] = item;
+    emit(state.copyWith(items: items));
+    await _persistItems();
+    return null;
+  }
+
   /// Indica se dois itens representam o mesmo produto com as mesmas escolhas
   /// (ignora quantidade e stockQuantity do produto, que muda a cada adição).
   bool _sameConfig(CartItem a, CartItem b) =>
-      cartItemSignature(a.product, a.choices) == cartItemSignature(b.product, b.choices);
+      cartItemSignature(a.product, a.choices, notes: a.notes) ==
+      cartItemSignature(b.product, b.choices, notes: b.notes);
 
   Future<void> removeItem(int index) async {
     final items = [...state.items]..removeAt(index);
@@ -322,7 +352,8 @@ class NewOrderCubit extends Cubit<NewOrderState> {
 
     String? error;
     if (delta.toPrint.isNotEmpty) {
-      error = await _printer.printKitchenComanda(customerName: customerName, items: delta.toPrint);
+      error = await _printer.printKitchenComanda(
+          customerName: customerName, items: delta.toPrint);
     }
     if (error == null && delta.toCancel.isNotEmpty) {
       error = await _printer.printKitchenCancellation(
@@ -333,7 +364,8 @@ class NewOrderCubit extends Cubit<NewOrderState> {
     }
 
     final hallError = error == null
-        ? await _printer.printHallComanda(customerName: customerName, items: state.items)
+        ? await _printer.printHallComanda(
+            customerName: customerName, items: state.items)
         : null;
 
     if (error == null && hallError == null) _markAsSaved();

@@ -124,13 +124,17 @@ class PrinterRepositoryImpl implements PrinterRepository {
     if (kitchenItems.isEmpty) return null;
     final config = await loadConfig();
     final printer = config.kitchenPrinter;
-    if (printer == null) return 'Impressora da cozinha não configurada.';
     final doc = await _buildComanda(
       title: 'COMANDA - COZINHA',
       customerName: customerName,
       items: kitchenItems,
       paperSize: config.paperSize,
     );
+    if (printer == null) {
+      const message = 'Impressora da cozinha não configurada.';
+      _monitor.reportFailure(message, documentText: doc.text);
+      return message;
+    }
     return _print(printer, doc.bytes, documentText: doc.text);
   }
 
@@ -144,7 +148,6 @@ class PrinterRepositoryImpl implements PrinterRepository {
     if (hallItems.isEmpty && comboLines.isEmpty) return null;
     final config = await loadConfig();
     final printer = config.hallPrinter;
-    if (printer == null) return 'Impressora do salão não configurada.';
     final doc = await _buildComanda(
       title: 'COMANDA - SALAO',
       customerName: customerName,
@@ -152,6 +155,11 @@ class PrinterRepositoryImpl implements PrinterRepository {
       paperSize: config.paperSize,
       comboLines: comboLines,
     );
+    if (printer == null) {
+      const message = 'Impressora do salão não configurada.';
+      _monitor.reportFailure(message, documentText: doc.text);
+      return message;
+    }
     return _print(printer, doc.bytes, documentText: doc.text);
   }
 
@@ -197,7 +205,6 @@ class PrinterRepositoryImpl implements PrinterRepository {
   }) async {
     final config = await loadConfig();
     final printer = config.hallPrinter ?? config.kitchenPrinter;
-    if (printer == null) return 'Nenhuma impressora configurada.';
     final generator = await _generator(config.paperSize);
     final bytes = <int>[];
     final text = StringBuffer();
@@ -231,9 +238,15 @@ class PrinterRepositoryImpl implements PrinterRepository {
       for (final choice in item.choices) {
         final label = choice.choiceType == 'removal'
             ? '  sem ${choice.selectedProductName}'
-            : '  ${choice.selectedProductName}';
+            : '  ${_choiceQtyPrefix(choice)}${choice.selectedProductName}';
         bytes.addAll(generator.text(label, styles: const PosStyles(height: PosTextSize.size1)));
         text.writeln(label);
+      }
+      final note = item.notes?.trim();
+      if (note != null && note.isNotEmpty) {
+        bytes.addAll(generator.text('  obs: $note',
+            styles: const PosStyles(height: PosTextSize.size1)));
+        text.writeln('  obs: $note');
       }
     }
     bytes.addAll(generator.hr());
@@ -273,7 +286,13 @@ class PrinterRepositoryImpl implements PrinterRepository {
     bytes.addAll(generator.feed(2));
     bytes.addAll(generator.cut());
 
-    return _print(printer, bytes, documentText: text.toString().trimRight());
+    final documentText = text.toString().trimRight();
+    if (printer == null) {
+      const message = 'Nenhuma impressora configurada.';
+      _monitor.reportFailure(message, documentText: documentText);
+      return message;
+    }
+    return _print(printer, bytes, documentText: documentText);
   }
 
   @override
@@ -285,12 +304,16 @@ class PrinterRepositoryImpl implements PrinterRepository {
     if (kitchenItems.isEmpty) return null;
     final config = await loadConfig();
     final printer = config.kitchenPrinter;
-    if (printer == null) return 'Impressora da cozinha não configurada.';
     final doc = await _buildCancellationComanda(
       customerName: customerName,
       items: kitchenItems,
       paperSize: config.paperSize,
     );
+    if (printer == null) {
+      const message = 'Impressora da cozinha não configurada.';
+      _monitor.reportFailure(message, documentText: doc.text);
+      return message;
+    }
     return _print(printer, doc.bytes, documentText: doc.text);
   }
 
@@ -329,10 +352,11 @@ class PrinterRepositoryImpl implements PrinterRepository {
       for (final choice in item.choices) {
         final label = choice.choiceType == 'removal'
             ? '   >> SEM ${choice.selectedProductName.toUpperCase()}'
-            : '   >> ${choice.selectedProductName}';
+            : '   >> ${_choiceQtyPrefix(choice)}${choice.selectedProductName}';
         bytes.addAll(generator.text(label, styles: const PosStyles(bold: true)));
         text.writeln(label);
       }
+      _appendItemNotes(generator, bytes, text, item);
       bytes.addAll(generator.hr());
       text.writeln(_divider(paperSize));
     }
@@ -379,10 +403,11 @@ class PrinterRepositoryImpl implements PrinterRepository {
       for (final choice in item.choices) {
         final label = choice.choiceType == 'removal'
             ? '   >> SEM ${choice.selectedProductName.toUpperCase()}'
-            : '   >> ${choice.selectedProductName}';
+            : '   >> ${_choiceQtyPrefix(choice)}${choice.selectedProductName}';
         bytes.addAll(generator.text(label, styles: const PosStyles(bold: true)));
         text.writeln(label);
       }
+      _appendItemNotes(generator, bytes, text, item);
       bytes.addAll(generator.hr());
       text.writeln(_divider(paperSize));
     }
@@ -410,6 +435,25 @@ class PrinterRepositoryImpl implements PrinterRepository {
     bytes.addAll(generator.cut());
     return _PrintDoc(bytes: bytes, text: text.toString().trimRight());
   }
+
+  /// Imprime a observação livre do item (ex.: "bem passado"), quando houver.
+  void _appendItemNotes(
+    Generator generator,
+    List<int> bytes,
+    StringBuffer text,
+    CartItem item,
+  ) {
+    final note = item.notes?.trim();
+    if (note == null || note.isEmpty) return;
+    final label = '   ** OBS: $note';
+    bytes.addAll(generator.text(label, styles: const PosStyles(bold: true)));
+    text.writeln(label);
+  }
+
+  /// Prefixo "Nx " para escolhas (ex.: adicionais) com quantidade maior que 1,
+  /// para a cozinha saber quantas unidades preparar. Vazio para quantidade 1.
+  String _choiceQtyPrefix(CartChoice choice) =>
+      choice.quantity > 1 ? '${qty(choice.quantity)}x ' : '';
 
   Future<Generator> _generator(PrinterPaperSize paperSize) async {
     final profile = await CapabilityProfile.load();

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/di/injector.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/widgets/printing_progress.dart';
 import '../../printer/domain/printer_repository.dart';
 import '../../settings/presentation/settings_cubit.dart';
 import '../domain/order_entities.dart';
@@ -134,10 +135,14 @@ class _OrderTile extends StatelessWidget {
     final detail = await sl<OrderRepository>().orderDetail(order.id);
     if (!context.mounted) return;
     final storeName = context.read<SettingsCubit>().state.storeName;
-    final error = await sl<PrinterRepository>().printBill(
-      storeName: storeName,
-      order: order,
-      items: detail.items,
+    final error = await runWithPrintingIndicator(
+      context,
+      () => sl<PrinterRepository>().printBill(
+        storeName: storeName,
+        order: order,
+        items: detail.items,
+      ),
+      message: 'Enviando conta para impressão...',
     );
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -151,11 +156,13 @@ class _OrderTile extends StatelessWidget {
       BuildContext context, OrderSummary order, List<CartItem> items) async {
     final ctrl = TextEditingController();
     final gross = items.fold(0.0, (s, i) => s + i.lineTotal);
+    final showDiscount = context.read<SettingsCubit>().state.showDiscountOnClose;
     return showDialog<int>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) {
-          final discount = (int.tryParse(ctrl.text) ?? 0).clamp(0, 100);
+          final discount =
+              showDiscount ? (int.tryParse(ctrl.text) ?? 0).clamp(0, 100) : 0;
           final total = gross * (1 - discount / 100);
           return Dialog(
             child: ConstrainedBox(
@@ -179,13 +186,15 @@ class _OrderTile extends StatelessWidget {
                             ),
                     ),
                     const Divider(),
-                    TextField(
-                      controller: ctrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Desconto %'),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    const SizedBox(height: 8),
+                    if (showDiscount) ...[
+                      TextField(
+                        controller: ctrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Desconto %'),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [

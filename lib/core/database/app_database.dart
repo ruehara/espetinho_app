@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'daos/menu_dao.dart';
 import 'daos/order_dao.dart';
@@ -31,10 +34,31 @@ part 'app_database.g.dart';
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
-      : super(executor ?? driftDatabase(name: 'restaurante'));
+      : super(executor ?? _open());
+
+  /// Abre o banco no diretório do aplicativo.
+  ///
+  /// No Windows, usa a própria pasta da aplicação (onde está o executável),
+  /// conforme solicitado. Nas demais plataformas, usa o diretório de suporte
+  /// do aplicativo (ex.: AppData), e NÃO "Documentos" — que costuma ser
+  /// sincronizado pelo OneDrive/Google Drive. Pastas sincronizadas travam/
+  /// copiam o arquivo SQLite enquanto o app o mantém aberto, corrompendo o
+  /// banco (sintoma: "no such table: orders" / definições de tabela
+  /// duplicadas).
+  static QueryExecutor _open() => driftDatabase(
+        name: 'restaurante',
+        native: DriftNativeOptions(
+          databaseDirectory: () async {
+            if (Platform.isWindows) {
+              return File(Platform.resolvedExecutable).parent;
+            }
+            return getApplicationSupportDirectory();
+          },
+        ),
+      );
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -67,6 +91,10 @@ class AppDatabase extends _$AppDatabase {
           if (from < 8) {
             await m.addColumn(recipeChoiceGroups, recipeChoiceGroups.kind);
           }
+          // As versões 9 e 10 chegaram a adicionar colunas de tipo de
+          // atendimento (balcão/viagem), recurso depois removido. Os bancos que
+          // já migraram mantêm as colunas (inofensivas, não referenciadas); por
+          // isso a versão do schema permanece 10 para não disparar downgrade.
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');

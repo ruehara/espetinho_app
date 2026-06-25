@@ -7,13 +7,17 @@ import '../../products/domain/product_entities.dart';
 /// cada edição do pedido). Quantidades (do item e das escolhas) não entram
 /// na assinatura — são tratadas separadamente como "quantidade impressa" vs.
 /// "quantidade atual" do mesmo item lógico.
-String cartItemSignature(Product product, List<CartChoice> choices) {
+String cartItemSignature(Product product, List<CartChoice> choices, {String? notes}) {
   final parts = choices
       .map((c) =>
           '${c.choiceType}|${c.groupName ?? ''}|${c.selectedProductId}|${c.selectedProductName}')
       .toList()
     ..sort();
-  return '${product.id}::${parts.join('##')}';
+  final base = '${product.id}::${parts.join('##')}';
+  // Itens sem observação mantêm a assinatura antiga (compatível com snapshots
+  // de impressão já gravados); observações distintas viram itens distintos.
+  final note = notes?.trim() ?? '';
+  return note.isEmpty ? base : '$base::note=$note';
 }
 
 /// Quantidade já impressa/confirmada de um item lógico (por assinatura),
@@ -50,10 +54,11 @@ class PrintDelta {
 }
 
 class _Aggregated {
-  _Aggregated(this.product, this.choices, this.quantity);
+  _Aggregated(this.product, this.choices, this.quantity, this.notes);
   final Product product;
   final List<CartChoice> choices;
   double quantity;
+  final String? notes;
 }
 
 /// Agrega itens do carrinho por assinatura, somando a quantidade dos que
@@ -61,10 +66,10 @@ class _Aggregated {
 Map<String, _Aggregated> _aggregateBySignature(List<CartItem> items) {
   final result = <String, _Aggregated>{};
   for (final item in items) {
-    final sig = cartItemSignature(item.product, item.choices);
+    final sig = cartItemSignature(item.product, item.choices, notes: item.notes);
     final existing = result[sig];
     if (existing == null) {
-      result[sig] = _Aggregated(item.product, item.choices, item.quantity);
+      result[sig] = _Aggregated(item.product, item.choices, item.quantity, item.notes);
     } else {
       existing.quantity += item.quantity;
     }
@@ -96,12 +101,14 @@ PrintDelta computePrintDeltaFrom({
         product: entry.value.product,
         choices: entry.value.choices,
         quantity: diff,
+        notes: entry.value.notes,
       ));
     } else if (diff < 0) {
       toCancel.add(CartItem(
         product: entry.value.product,
         choices: entry.value.choices,
         quantity: -diff,
+        notes: entry.value.notes,
       ));
     }
   }

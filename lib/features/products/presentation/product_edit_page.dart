@@ -357,7 +357,9 @@ class _ChoiceSection extends StatelessWidget {
             TextButton.icon(
               icon: const Icon(Icons.add),
               label: Text(buttonLabel),
-              onPressed: () => _addGroup(context, state, kind),
+              onPressed: kind == ChoiceGroupKind.additional
+                  ? () => _editAdditionalGroup(context, state)
+                  : () => _addGroup(context, state, kind),
             ),
           ],
         ),
@@ -371,6 +373,9 @@ class _ChoiceSection extends StatelessWidget {
   Widget _groupCard(BuildContext context, ProductEditCubit cubit,
       ProductEditState state, ProductDetail draft, int i) {
     final g = draft.choiceGroups[i];
+    if (g.kind == ChoiceGroupKind.additional) {
+      return _additionalGroupCard(context, cubit, state, draft, i);
+    }
     final sourceNames = g.sourceGroupIds
         .map((id) => state.groups
             .firstWhere((x) => x.id == id,
@@ -608,6 +613,220 @@ class _ChoiceSection extends StatelessWidget {
       groups[groupIndex] = g.copyWith(options: options);
       cubit.updateDraft(draft.copyWith(choiceGroups: groups));
     }
+  }
+
+  /// Card de um grupo adicional: lista os adicionais escolhidos com a
+  /// quantidade máxima e o acréscimo de preço, e abre o seletor de
+  /// ingredientes/espetos para edição.
+  Widget _additionalGroupCard(BuildContext context, ProductEditCubit cubit,
+      ProductEditState state, ProductDetail draft, int i) {
+    final g = draft.choiceGroups[i];
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(g.name,
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+                IconButton(
+                  tooltip: 'Editar adicionais',
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: () => _editAdditionalGroup(context, state, index: i),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: () {
+                    final groups = [...draft.choiceGroups]..removeAt(i);
+                    cubit.updateDraft(draft.copyWith(choiceGroups: groups));
+                  },
+                ),
+              ],
+            ),
+            if (g.options.isEmpty)
+              const Text('Nenhum adicional selecionado.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey))
+            else
+              for (final o in g.options)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.chevron_right, size: 16),
+                      Expanded(child: Text(o.name)),
+                      Text('máx ${qty(o.quantity ?? 1)}',
+                          style:
+                              const TextStyle(fontSize: 12, color: Colors.grey)),
+                      if (o.priceAddition > 0) ...[
+                        const SizedBox(width: 8),
+                        Text('+${money(o.priceAddition)}'),
+                      ],
+                    ],
+                  ),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Abre o seletor de adicionais (ingredientes + espetos). Cada item tem um
+  /// checkbox e um campo de quantidade máxima; o acréscimo de preço é o preço
+  /// de venda do próprio produto (itens sem preço de venda não podem ser
+  /// adicionais). Quando [index] é informado, edita um grupo existente.
+  Future<void> _editAdditionalGroup(BuildContext context, ProductEditState state,
+      {int? index}) async {
+    final cubit = context.read<ProductEditCubit>();
+    final existing = index == null ? null : cubit.state.draft.choiceGroups[index];
+    final nameCtrl = TextEditingController(text: existing?.name ?? 'Adicionais');
+
+    // productId -> quantidade máxima escolhida.
+    final selected = <int, int>{};
+    for (final o in existing?.options ?? const <ChoiceOptionDraft>[]) {
+      if (o.componentProductId != null) {
+        selected[o.componentProductId!] = (o.quantity ?? 1).round();
+      }
+    }
+
+    // Produtos sem controle de estoque (ex.: molhos/saladas servidos a gosto)
+    // não entram como adicionais.
+    final ingredients = state.ingredients.where((p) => p.trackStock).toList();
+    final espetos = state.espetos.where((p) => p.trackStock).toList();
+    final candidates = {for (final p in [...ingredients, ...espetos]) p.id: p};
+
+    Widget productRow(StateSetter setState, Product p) {
+      final price = p.salePrice ?? 0;
+      final eligible = price > 0;
+      final checked = selected.containsKey(p.id);
+      final maxQty = selected[p.id] ?? 1;
+      return Opacity(
+        opacity: eligible ? 1 : 0.5,
+        child: Row(
+          children: [
+            Checkbox(
+              value: checked,
+              onChanged: !eligible
+                  ? null
+                  : (v) => setState(() {
+                        if (v == true) {
+                          selected[p.id] = maxQty;
+                        } else {
+                          selected.remove(p.id);
+                        }
+                      }),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(p.name),
+                  Text(eligible ? '+${money(price)}' : 'sem preço de venda',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ),
+            ),
+            if (checked) ...[
+              const Text('máx', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.remove, size: 18),
+                onPressed: maxQty <= 1
+                    ? null
+                    : () => setState(() => selected[p.id] = maxQty - 1),
+              ),
+              Text('$maxQty', style: const TextStyle(fontWeight: FontWeight.bold)),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.add, size: 18),
+                onPressed: () => setState(() => selected[p.id] = maxQty + 1),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Adicionais'),
+          content: SizedBox(
+            width: 420,
+            height: 520,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Nome do grupo'),
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: ListView(
+                    children: [
+                      const Text('Ingredientes',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      if (ingredients.isEmpty)
+                        const Text('Sem ingredientes cadastrados.',
+                            style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      for (final p in ingredients) productRow(setState, p),
+                      const SizedBox(height: 12),
+                      const Text('Espetos',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      if (espetos.isEmpty)
+                        const Text('Sem espetos cadastrados.',
+                            style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      for (final p in espetos) productRow(setState, p),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancelar')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Salvar')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || nameCtrl.text.trim().isEmpty) return;
+
+    final options = <ChoiceOptionDraft>[
+      for (final entry in selected.entries)
+        if (candidates[entry.key] case final p?)
+          ChoiceOptionDraft(
+            name: p.name,
+            componentProductId: p.id,
+            componentName: p.name,
+            quantity: entry.value.toDouble(),
+            priceAddition: p.salePrice ?? 0,
+          ),
+    ];
+    final draft = cubit.state.draft;
+    final group = ChoiceGroupDraft(
+      name: nameCtrl.text.trim(),
+      minSelections: 0,
+      maxSelections: 99,
+      kind: ChoiceGroupKind.additional,
+      options: options,
+    );
+    final groups = [...draft.choiceGroups];
+    if (index == null) {
+      groups.add(group);
+    } else {
+      groups[index] = group;
+    }
+    cubit.updateDraft(draft.copyWith(choiceGroups: groups));
   }
 }
 

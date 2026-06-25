@@ -87,6 +87,7 @@ class OrderRepositoryImpl implements OrderRepository {
           productName: item.product.name,
           unitPrice: item.unitPrice,
           quantity: item.quantity,
+          notes: Value(item.notes),
         ),
         choices: item.choices
             .map((c) => OrderItemChoicesCompanion.insert(
@@ -150,6 +151,7 @@ class OrderRepositoryImpl implements OrderRepository {
       cartItems.add(CartItem(
         product: _toProduct(productRow),
         quantity: item.quantity,
+        notes: item.notes,
         choices: choices
             .map((c) => CartChoice(
                   groupName: c.groupName,
@@ -183,29 +185,7 @@ class OrderRepositoryImpl implements OrderRepository {
     final gross = items.fold(0.0, (s, i) => s + i.lineTotal);
     final total = gross * (1 - discountPercent / 100);
 
-    final writes = items.map((item) {
-      return OrderItemWrite(
-        item: OrderItemsCompanion.insert(
-          orderId: 0,
-          productId: item.product.id,
-          productName: item.product.name,
-          unitPrice: item.unitPrice,
-          quantity: item.quantity,
-        ),
-        choices: item.choices
-            .map((c) => OrderItemChoicesCompanion.insert(
-                  orderItemId: 0,
-                  choiceType: Value(c.choiceType),
-                  groupName: Value(c.groupName),
-                  selectedProductId: Value(c.selectedProductId),
-                  selectedProductName: c.selectedProductName,
-                  quantity: c.quantity,
-                  priceAddition: Value(c.priceAddition),
-                  preparationLocation: Value(c.preparationLocation?.toDbValue()),
-                ))
-            .toList(),
-      );
-    }).toList();
+    final writes = items.map(_toWrite).toList();
 
     return _dao.updateOrder(
       orderId: orderId,
@@ -285,7 +265,7 @@ class OrderRepositoryImpl implements OrderRepository {
   }) async {
     final aggregated = <String, CartItem>{};
     for (final item in currentItems) {
-      final sig = cartItemSignature(item.product, item.choices);
+      final sig = cartItemSignature(item.product, item.choices, notes: item.notes);
       final existing = aggregated[sig];
       aggregated[sig] = existing == null
           ? item

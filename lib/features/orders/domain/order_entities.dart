@@ -86,11 +86,16 @@ class CartItem extends Equatable {
     required this.product,
     this.choices = const [],
     this.quantity = 1,
+    this.notes,
   });
 
   final Product product;
   final List<CartChoice> choices;
   final double quantity;
+
+  /// Observação livre do item (ex.: "bem passado", "sem gelo"), digitada
+  /// pelo operador e impressa na comanda da cozinha. Nula/vazia quando não há.
+  final String? notes;
 
   double get unitPrice =>
       (product.salePrice ?? 0) +
@@ -100,12 +105,20 @@ class CartItem extends Equatable {
 
   double get lineTotal => unitPrice * quantity;
 
-  CartItem copyWith({Product? product, List<CartChoice>? choices, double? quantity}) => CartItem(
+  CartItem copyWith({
+    Product? product,
+    List<CartChoice>? choices,
+    double? quantity,
+    String? notes,
+    bool clearNotes = false,
+  }) =>
+      CartItem(
         product: product ?? this.product,
         choices: choices ?? this.choices,
         quantity: quantity ?? this.quantity,
+        notes: clearNotes ? null : (notes ?? this.notes),
       );
 
   @override
-  List<Object?> get props => [product, choices, quantity];
+  List<Object?> get props => [product, choices, quantity, notes];
 }

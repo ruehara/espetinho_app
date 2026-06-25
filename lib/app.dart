@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/di/injector.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/utils/scroll.dart';
 import 'core/widgets/select_all_on_focus.dart';
 import 'features/printer/domain/printer_connection_monitor.dart';
 import 'features/printer/presentation/printer_connection_guard.dart';
@@ -21,6 +22,7 @@ class RestauranteApp extends StatelessWidget {
       child: BlocBuilder<SettingsCubit, AppSettings>(
         builder: (context, settings) {
           return MaterialApp.router(
+            scrollBehavior: CustomScrollBehavior(),
             title: 'Gestão de Restaurante',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light(),

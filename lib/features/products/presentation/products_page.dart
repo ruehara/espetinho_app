@@ -19,18 +19,26 @@ class ProductsPage extends StatelessWidget {
   }
 }
 
-class _ProductsView extends StatelessWidget {
+class _ProductsView extends StatefulWidget {
   const _ProductsView();
+
+  @override
+  State<_ProductsView> createState() => _ProductsViewState();
+}
+
+class _ProductsViewState extends State<_ProductsView> {
+  /// Categorias que estão recolhidas (por padrão todas começam expandidas).
+  final Set<String> _collapsed = <String>{};
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Produtos')),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         heroTag: 'products-fab',
         onPressed: () => _openEditor(context, null),
-        mini: true,
-        child: const Icon(Icons.add),
+        icon: const Icon(Icons.add),
+        label: const Text('Novo Produto'),
       ),
       body: BlocBuilder<ProductsCubit, ProductsState>(
         builder: (context, state) {
@@ -40,49 +48,63 @@ class _ProductsView extends StatelessWidget {
           if (state.products.isEmpty) {
             return const Center(child: Text('Nenhum produto cadastrado.'));
           }
-          final byCategory = <String, List<Product>>{};
+          final byCategory = <String, Map<String, List<Product>>>{};
           for (final p in state.products) {
-            byCategory.putIfAbsent(state.categoryName(p.groupId), () => []).add(p);
+            final category = byCategory.putIfAbsent(
+                state.categoryName(p.groupId), () => <String, List<Product>>{});
+            category.putIfAbsent(state.groupName(p.groupId), () => []).add(p);
           }
           final categories = byCategory.keys.toList()..sort();
           return ListView(
             padding: const EdgeInsets.only(bottom: 80),
             children: [
               for (final category in categories) ...[
-                _SectionHeader(category),
-                for (final p in byCategory[category]!)
-                  ListTile(
-                    leading: CircleAvatar(
-                      child: Icon(p.isComposite ? Icons.lunch_dining : Icons.tapas),
-                    ),
-                    title: Row(
-                      children: [
-                        Expanded(child: Text(p.name)),
-                        if (p.isInternalUse)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 4),
-                            child: Chip(
-                              label: Text('insumo'),
-                              visualDensity: VisualDensity.compact),
-                          ),
-                        if (!p.isActive)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 4),
-                            child: Chip(
-                              label: Text('inativo'),
-                              visualDensity: VisualDensity.compact),
-                          ),
-                      ],
-                    ),
-                    subtitle: Text(
-                        'custo ${money(p.costPrice)}'
-                        '${p.salePrice == null ? '' : ' · venda ${money(p.salePrice)}'}'),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: () => _confirmDelete(context, p.id, p.name),
-                    ),
-                    onTap: () => _openEditor(context, p.id),
-                  ),
+                _SectionHeader(
+                  category,
+                  count: byCategory[category]!
+                      .values
+                      .fold<int>(0, (sum, products) => sum + products.length),
+                  expanded: !_collapsed.contains(category),
+                  onTap: () => _toggleCategory(category),
+                ),
+                if (!_collapsed.contains(category)) ...[
+                  for (final group in byCategory[category]!.keys.toList()..sort()) ...[
+                    _GroupHeader(group, count: byCategory[category]![group]!.length),
+                    for (final p in byCategory[category]![group]!)
+                      ListTile(
+                        leading: CircleAvatar(
+                          child: Icon(p.isComposite ? Icons.lunch_dining : Icons.tapas),
+                        ),
+                        title: Row(
+                          children: [
+                            Expanded(child: Text(p.name)),
+                            if (p.isInternalUse)
+                              const Padding(
+                                padding: EdgeInsets.only(left: 4),
+                                child: Chip(
+                                  label: Text('insumo'),
+                                  visualDensity: VisualDensity.compact),
+                              ),
+                            if (!p.isActive)
+                              const Padding(
+                                padding: EdgeInsets.only(left: 4),
+                                child: Chip(
+                                  label: Text('inativo'),
+                                  visualDensity: VisualDensity.compact),
+                              ),
+                          ],
+                        ),
+                        subtitle: Text(
+                            'custo ${money(p.costPrice)}'
+                            '${p.salePrice == null ? '' : ' · venda ${money(p.salePrice)}'}'),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () => _confirmDelete(context, p.id, p.name),
+                        ),
+                        onTap: () => _openEditor(context, p.id),
+                      ),
+                  ],
+                ],
                 const Divider(height: 1),
               ],
             ],
@@ -90,6 +112,14 @@ class _ProductsView extends StatelessWidget {
         },
       ),
     );
+  }
+
+  void _toggleCategory(String category) {
+    setState(() {
+      if (!_collapsed.remove(category)) {
+        _collapsed.add(category);
+      }
+    });
   }
 
   Future<void> _openEditor(BuildContext context, int? id) async {
@@ -128,16 +158,61 @@ class _ProductsView extends StatelessWidget {
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader(this.title);
+class _GroupHeader extends StatelessWidget {
+  const _GroupHeader(this.title, {required this.count});
+
   final String title;
+  final int count;
 
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(32, 8, 16, 4),
+      child: Text(
+        '$title ($count)',
+        style: TextStyle(fontWeight: FontWeight.w600, color: color),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(
+    this.title, {
+    required this.count,
+    required this.expanded,
+    required this.onTap,
+  });
+
+  final String title;
+  final int count;
+  final bool expanded;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-        child: Text(title,
-            style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary)),
-      );
+        child: Row(
+          children: [
+            Icon(
+              expanded ? Icons.expand_more : Icons.chevron_right,
+              color: color,
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                '$title ($count)',
+                style: TextStyle(fontWeight: FontWeight.bold, color: color),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

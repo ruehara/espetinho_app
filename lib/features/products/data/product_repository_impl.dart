@@ -39,6 +39,26 @@ class ProductRepositoryImpl implements ProductRepository {
       (await _dao.getIngredients()).map(_toEntity).toList();
 
   @override
+  Future<List<Product>> getEspetos() async {
+    final categories = await _menuDao.getCategories();
+    final espetoCategoryIds = categories
+        .where((c) => c.name.toLowerCase().contains('espeto'))
+        .map((c) => c.id)
+        .toSet();
+    final groups = await _menuDao.getGroups();
+    final espetoGroupIds = groups
+        .where((g) => espetoCategoryIds.contains(g.categoryId))
+        .map((g) => g.id)
+        .toSet();
+    return (await _dao.getProducts())
+        .where((p) =>
+            espetoGroupIds.contains(p.groupId) && !p.isInternalUse && p.isActive)
+        .map(_toEntity)
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+  }
+
+  @override
   Future<List<ProductGroup>> getGroups() async =>
       (await _menuDao.getGroups())
           .map((r) => ProductGroup(
