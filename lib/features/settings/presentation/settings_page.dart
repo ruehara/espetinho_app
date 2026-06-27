@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/widgets/brasa/brasa_widgets.dart';
 import '../domain/settings_repository.dart';
 import 'settings_cubit.dart';
 
@@ -17,6 +18,7 @@ class SettingsPage extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              const SectionLabel('Geral', padding: EdgeInsets.only(bottom: 10)),
               TextFormField(
                 initialValue: settings.storeName,
                 decoration: const InputDecoration(labelText: 'Nome do estabelecimento'),
@@ -39,7 +41,7 @@ class SettingsPage extends StatelessWidget {
                 onChanged: cubit.setShowDiscountOnClose,
               ),
               const SizedBox(height: 24),
-              const Text('Tema', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SectionLabel('Tema', padding: EdgeInsets.only(bottom: 4)),
               RadioGroup<ThemeMode>(
                 groupValue: settings.themeMode,
                 onChanged: (m) {

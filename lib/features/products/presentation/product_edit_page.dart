@@ -214,6 +214,7 @@ class _RecipeSection extends StatelessWidget {
       ProductDetail draft, int i) {
     final item = draft.recipeItems[i];
     return Card(
+      margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
         title: Text(item.ingredientName),
         subtitle: Text('Qtd: ${qty(item.quantity)}'),
@@ -383,6 +384,7 @@ class _ChoiceSection extends StatelessWidget {
             .name)
         .toList();
     return Card(
+      margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -622,6 +624,7 @@ class _ChoiceSection extends StatelessWidget {
       ProductEditState state, ProductDetail draft, int i) {
     final g = draft.choiceGroups[i];
     return Card(
+      margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(

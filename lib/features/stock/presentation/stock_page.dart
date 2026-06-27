@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/di/injector.dart';
+import '../../../core/theme/brasa_colors.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/widgets/brasa/brasa_widgets.dart';
 import '../../products/domain/product_entities.dart';
 import 'stock_cubit.dart';
 
@@ -44,18 +46,35 @@ class _StockViewState extends State<_StockView> {
             byCategory.putIfAbsent(state.categoryName(p.groupId), () => []).add(p);
           }
           final categories = byCategory.keys.toList()..sort();
+          final c = BrasaColors.of(context);
           return ListView(
+            padding: const EdgeInsets.only(bottom: 24),
             children: [
               if (low.isNotEmpty)
                 Container(
-                  width: double.infinity,
-                  color: Theme.of(context).colorScheme.errorContainer,
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    '${low.length} item(ns) abaixo do estoque mínimo: '
-                    '${low.map((p) => p.name).join(', ')}',
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.onErrorContainer),
+                  margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: c.accd.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: c.accd.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.warning_amber, color: c.accd, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '${low.length} item(ns) abaixo do estoque mínimo: '
+                          '${low.map((p) => p.name).join(', ')}',
+                          style: TextStyle(
+                              color: c.ink,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               for (final category in categories) ...[
@@ -68,18 +87,21 @@ class _StockViewState extends State<_StockView> {
                 if (!_collapsed.contains(category))
                   for (final p in byCategory[category]!)
                     ListTile(
-                      leading: Icon(
-                        _isLow(p) ? Icons.warning_amber : Icons.inventory_2_outlined,
-                        color: _isLow(p) ? Theme.of(context).colorScheme.error : null,
+                      leading: TintIcon(
+                        _isLow(p)
+                            ? Icons.warning_amber
+                            : Icons.inventory_2_outlined,
+                        color: _isLow(p) ? c.accd : c.brand,
                       ),
                       title: Text(p.name),
                       subtitle: Text('Mínimo: ${qty(p.minStock)} · custo ${money(p.costPrice)}'),
                       trailing: Text(
                         qty(p.stockQuantity),
                         style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: _isLow(p) ? Theme.of(context).colorScheme.error : null,
+                          fontFamily: 'SpaceGrotesk',
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: _isLow(p) ? c.accd : c.ink,
                         ),
                       ),
                       onTap: () => _actions(context, p),

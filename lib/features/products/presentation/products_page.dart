@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/di/injector.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/widgets/brasa/brasa_widgets.dart';
 import '../domain/product_entities.dart';
 import 'product_edit_page.dart';
 import 'products_cubit.dart';
@@ -72,8 +73,8 @@ class _ProductsViewState extends State<_ProductsView> {
                     _GroupHeader(group, count: byCategory[category]![group]!.length),
                     for (final p in byCategory[category]![group]!)
                       ListTile(
-                        leading: CircleAvatar(
-                          child: Icon(p.isComposite ? Icons.lunch_dining : Icons.tapas),
+                        leading: TintIcon(
+                          p.isComposite ? Icons.lunch_dining : Icons.tapas,
                         ),
                         title: Row(
                           children: [

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/di/injector.dart';
+import '../../../core/theme/brasa_colors.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/widgets/brasa/brasa_widgets.dart';
 import '../../../core/widgets/printing_progress.dart';
 import '../../printer/domain/printer_repository.dart';
 import '../../settings/presentation/settings_cubit.dart';
@@ -47,12 +49,20 @@ class _OrdersView extends StatelessWidget {
             return const Center(child: Text('Nenhum pedido hoje.'));
           }
           return ListView(
-            padding: const EdgeInsets.only(bottom: 80),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
             children: [
-              if (state.open.isNotEmpty) const _SectionHeader('Abertos'),
-              for (final o in state.open) _OrderTile(order: o),
-              if (state.closed.isNotEmpty) const _SectionHeader('Fechados'),
-              for (final o in state.closed) _OrderTile(order: o),
+              if (state.open.isNotEmpty) const SectionLabel('Em aberto'),
+              for (final o in state.open)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 11),
+                  child: _OrderTile(order: o),
+                ),
+              if (state.closed.isNotEmpty) const SectionLabel('Fechados'),
+              for (final o in state.closed)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 11),
+                  child: _OrderTile(order: o),
+                ),
             ],
           );
         },
@@ -61,87 +71,153 @@ class _OrdersView extends StatelessWidget {
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader(this.title);
-  final String title;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-        child: Text(title,
-            style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary)),
-      );
-}
-
 class _OrderTile extends StatelessWidget {
   const _OrderTile({required this.order});
   final OrderSummary order;
 
+  /// Iniciais do cliente para o avatar (ex.: "Mesa 3" → "M3", "João" → "JO").
+  String get _initials {
+    final parts = order.customerName.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2 && parts[1].isNotEmpty) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    final s = order.customerName.trim();
+    return (s.isEmpty ? '?' : s.length == 1 ? s : s.substring(0, 2)).toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final c = BrasaColors.of(context);
     final cubit = context.read<OrdersCubit>();
-    return ListTile(
-      leading: CircleAvatar(
-        child: Icon(order.isOpen ? Icons.receipt_long : Icons.check),
+    return Opacity(
+      opacity: order.isOpen ? 1 : 0.75,
+      child: BrasaCard(
+        accentBorderLeft: order.isOpen,
+        onTap: order.isOpen
+            ? () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => NewOrderPage(orderId: order.id)))
+            : () => _viewOrder(context, order),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: c.tint,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: order.isOpen
+                  ? Text(_initials,
+                      style: TextStyle(
+                        fontFamily: 'SpaceGrotesk',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: c.brand,
+                      ))
+                  : Icon(Icons.check_circle, color: c.acc, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(order.customerName,
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                                color: c.ink)),
+                      ),
+                      Text(money(order.total),
+                          style: TextStyle(
+                            fontFamily: 'SpaceGrotesk',
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                            color: c.ink,
+                          )),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${dateTimeLabel(order.isOpen ? order.openedAt : (order.closedAt ?? order.openedAt))}'
+                    '${order.discountPercent > 0 ? ' · -${order.discountPercent}%' : order.isOpen ? '' : ' · pago'}',
+                    style: TextStyle(color: c.sub, fontSize: 12),
+                  ),
+                  const SizedBox(height: 9),
+                  Row(
+                    children: [
+                      StatusChip(order.isOpen ? 'Em aberto' : 'Fechado',
+                          tone: order.isOpen
+                              ? StatusTone.brand
+                              : StatusTone.accent),
+                      const Spacer(),
+                      _actions(context, cubit),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
-      title: Text(order.customerName),
-      subtitle: Text(
-          '${dateTimeLabel(order.openedAt)} · ${money(order.total)}'
-          '${order.discountPercent > 0 ? ' (-${order.discountPercent}%)' : ''}'),
-      onTap: order.isOpen
-          ? () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => NewOrderPage(orderId: order.id)))
-          : () => _viewOrder(context, order),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+    );
+  }
+
+  /// Ações por pedido (imprimir conta, fechar, excluir / cadeado).
+  Widget _actions(BuildContext context, OrdersCubit cubit) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          tooltip: 'Imprimir conta',
+          icon: const Icon(Icons.receipt_long, size: 20),
+          onPressed: () => _printBill(context, order),
+        ),
+        if (order.isOpen) ...[
           IconButton(
-            tooltip: 'Imprimir conta',
-            icon: const Icon(Icons.receipt),
-            onPressed: () => _printBill(context, order),
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Fechar pedido (baixa estoque)',
+            icon: const Icon(Icons.point_of_sale, size: 20),
+            onPressed: () async {
+              final detail = await sl<OrderRepository>().orderDetail(order.id);
+              if (!context.mounted) return;
+              final discount = await _closeDialog(context, order, detail.items);
+              if (discount == null) return;
+              await cubit.closeOrder(order.id, discountPercent: discount);
+              if (!context.mounted) return;
+              // Após fechar, imprime a conta com o desconto aplicado. Se a
+              // impressora não conectar, printBill reporta ao monitor e o
+              // PrinterConnectionGuard global exibe o alerta.
+              final gross = detail.items.fold(0.0, (s, i) => s + i.lineTotal);
+              final closed = OrderSummary(
+                id: order.id,
+                customerName: order.customerName,
+                status: 'closed',
+                openedAt: order.openedAt,
+                closedAt: DateTime.now(),
+                total: gross * (1 - discount / 100),
+                discountPercent: discount,
+              );
+              await _sendBill(context, closed, detail.items);
+            },
           ),
-          if (order.isOpen) ...[
-            IconButton(
-              tooltip: 'Fechar pedido (baixa estoque)',
-              icon: const Icon(Icons.point_of_sale),
-              onPressed: () async {
-                final detail = await sl<OrderRepository>().orderDetail(order.id);
-                if (!context.mounted) return;
-                final discount = await _closeDialog(context, order, detail.items);
-                if (discount == null) return;
-                await cubit.closeOrder(order.id, discountPercent: discount);
-                if (!context.mounted) return;
-                // Após fechar, imprime a conta com o desconto aplicado. Se a
-                // impressora não conectar, printBill reporta ao monitor e o
-                // PrinterConnectionGuard global exibe o alerta.
-                final gross =
-                    detail.items.fold(0.0, (s, i) => s + i.lineTotal);
-                final closed = OrderSummary(
-                  id: order.id,
-                  customerName: order.customerName,
-                  status: 'closed',
-                  openedAt: order.openedAt,
-                  closedAt: DateTime.now(),
-                  total: gross * (1 - discount / 100),
-                  discountPercent: discount,
-                );
-                await _sendBill(context, closed, detail.items);
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () async {
-                final ok =
-                    await _confirm(context, 'Excluir o pedido de ${order.customerName}?');
-                if (ok) await cubit.deleteOrder(order.id);
-              },
-            ),
-          ] else
-            const Icon(Icons.lock_outline),
-        ],
-      ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.delete_outline, size: 20),
+            onPressed: () async {
+              final ok = await _confirm(
+                  context, 'Excluir o pedido de ${order.customerName}?');
+              if (ok) await cubit.deleteOrder(order.id);
+            },
+          ),
+        ] else
+          Icon(Icons.lock_outline, size: 20, color: BrasaColors.of(context).sub),
+      ],
     );
   }
 

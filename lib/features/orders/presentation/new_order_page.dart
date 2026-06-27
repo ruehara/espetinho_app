@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/di/injector.dart';
+import '../../../core/theme/brasa_colors.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/widgets/brasa/brasa_widgets.dart';
 import '../../../core/widgets/printing_progress.dart';
 import '../../products/domain/product_entities.dart';
 import '../domain/order_entities.dart';
@@ -107,6 +109,7 @@ class _NewOrderViewState extends State<_NewOrderView> {
                 : state.items.isEmpty
                     ? const Center(child: Text('Adicione itens ao pedido.'))
                     : ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                         itemCount: state.items.length,
                         itemBuilder: (context, i) =>
                             _CartTile(item: state.items[i], index: i),
@@ -696,6 +699,7 @@ class _MontageScreenState extends State<_MontageScreen> {
   late final List<Set<int>> _removals;
   late final List<TextEditingController> _notes;
   late final List<String> _labels;
+  late final List<double> _quantities;
 
   @override
   void initState() {
@@ -711,6 +715,7 @@ class _MontageScreenState extends State<_MontageScreen> {
     _notes = [
       for (final u in widget.units) TextEditingController(text: u.initialNote ?? '')
     ];
+    _quantities = [for (final u in widget.units) u.initialQuantity];
     _labels = _computeLabels();
   }
 
@@ -792,7 +797,7 @@ class _MontageScreenState extends State<_MontageScreen> {
       result.add(CartItem(
         product: unit.product,
         choices: choices,
-        quantity: unit.initialQuantity,
+        quantity: _quantities[i],
         notes: note.isEmpty ? null : note,
       ));
     }
@@ -848,49 +853,19 @@ class _MontageScreenState extends State<_MontageScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: Material(
-        elevation: 8,
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Valor do lanche',
-                          style: TextStyle(fontSize: 16)),
-                      Text(
-                        money(_unitPrice(_current)),
-                        style: const TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                ),
-                FilledButton.icon(
-                  onPressed: (_allComplete && !_validating) ? _confirm : null,
-                  icon: _validating
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.check),
-                  label: Text(!_allComplete
-                      ? 'Complete todos os itens'
-                      : _validating
-                          ? 'Verificando estoque...'
-                          : widget.isEditing
-                              ? 'Salvar'
-                              : 'Confirmar (${widget.units.length})'),
-                ),
-              ],
-            ),
-          ),
+      bottomNavigationBar: BrasaTotalBar(
+        value: money(_unitPrice(_current)),
+        action: PillButton(
+          expanded: true,
+          icon: _validating ? null : (widget.isEditing ? Icons.check : Icons.add_shopping_cart),
+          label: !_allComplete
+              ? 'Complete todos os itens'
+              : _validating
+                  ? 'Verificando estoque...'
+                  : widget.isEditing
+                      ? 'Salvar'
+                      : 'Confirmar (${widget.units.length})',
+          onPressed: (_allComplete && !_validating) ? _confirm : null,
         ),
       ),
     );
@@ -899,10 +874,45 @@ class _MontageScreenState extends State<_MontageScreen> {
   Widget _buildUnit(int i) {
     final unit = widget.units[i];
     final detail = unit.detail;
+    final c = BrasaColors.of(context);
     final removableItems = detail.recipeItems.where((r) => r.isOptional).toList();
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
+        // Header do produto: ícone tonal + nome/base + stepper de quantidade.
+        Row(
+          children: [
+            const TintIcon(Icons.lunch_dining, size: 56, iconSize: 30, radius: 16),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    unit.product.name,
+                    style: TextStyle(
+                      fontFamily: 'SpaceGrotesk',
+                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                      color: c.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text('Base · ${money(unit.product.salePrice)}',
+                      style: TextStyle(color: c.sub, fontSize: 12.5)),
+                ],
+              ),
+            ),
+            QtyStepper(
+              label: qty(_quantities[i]),
+              onDecrement: _quantities[i] > 1
+                  ? () => setState(() => _quantities[i] -= 1)
+                  : null,
+              onIncrement: () => setState(() => _quantities[i] += 1),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
         // Grupos de escolha não-adicionais (sabor, molhos...) primeiro.
         for (var gi = 0; gi < detail.choiceGroups.length; gi++)
           if (detail.choiceGroups[gi].kind != ChoiceGroupKind.additional)
@@ -912,24 +922,26 @@ class _MontageScreenState extends State<_MontageScreen> {
                 showError: (_selections[i][gi]?.length ?? 0) <
                     detail.choiceGroups[gi].minSelections),
         if (removableItems.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Text('Ingredientes',
-                style: TextStyle(fontWeight: FontWeight.bold)),
+          const SectionLabel('Inclusos · toque p/ remover',
+              padding: EdgeInsets.only(top: 8, bottom: 6)),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: [
+              for (final r in removableItems)
+                _IngredientChip(
+                  name: r.ingredientName,
+                  included: !_removals[i].contains(r.ingredientId),
+                  onTap: () => setState(() {
+                    if (_removals[i].contains(r.ingredientId)) {
+                      _removals[i].remove(r.ingredientId);
+                    } else {
+                      _removals[i].add(r.ingredientId);
+                    }
+                  }),
+                ),
+            ],
           ),
-          for (final r in removableItems)
-            CheckboxListTile(
-              dense: true,
-              title: Text(r.ingredientName),
-              value: !_removals[i].contains(r.ingredientId),
-              onChanged: (v) => setState(() {
-                if (v == true) {
-                  _removals[i].remove(r.ingredientId);
-                } else {
-                  _removals[i].add(r.ingredientId);
-                }
-              }),
-            ),
         ],
         // Grupos adicionais ficam depois dos ingredientes.
         for (var gi = 0; gi < detail.choiceGroups.length; gi++)
@@ -937,20 +949,66 @@ class _MontageScreenState extends State<_MontageScreen> {
             _buildGroup(context, setState, detail.choiceGroups[gi], gi,
                 unit.prepared.sourceProducts, unit.prepared.manualProducts,
                 _selections[i], unit.prepared.outOfStockIds),
-        const Padding(
-          padding: EdgeInsets.only(top: 8),
-          child: Text('Observação', style: TextStyle(fontWeight: FontWeight.bold)),
-        ),
+        const SectionLabel('Observações',
+            padding: EdgeInsets.only(top: 12, bottom: 6)),
         TextField(
           controller: _notes[i],
           textCapitalization: TextCapitalization.sentences,
+          maxLines: 2,
           decoration: const InputDecoration(
             hintText: 'Ex.: bem passado, sem cebola...',
-            isDense: true,
           ),
         ),
-        const SizedBox(height: 24),
       ],
+    );
+  }
+}
+
+/// Chip toggável de ingrediente incluso na montagem: incluído mostra um check
+/// em laranja sobre fundo tonal; removido fica esmaecido com texto riscado.
+class _IngredientChip extends StatelessWidget {
+  const _IngredientChip(
+      {required this.name, required this.included, required this.onTap});
+
+  final String name;
+  final bool included;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = BrasaColors.of(context);
+    return Material(
+      color: included ? c.tint : c.surf,
+      borderRadius: BorderRadius.circular(11),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(11),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(11),
+            border: included ? null : Border.all(color: c.line),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (included) ...[
+                Icon(Icons.check, size: 15, color: c.acc),
+                const SizedBox(width: 5),
+              ],
+              Text(
+                name,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12.5,
+                  color: included ? c.acc : c.sub,
+                  decoration: included ? null : TextDecoration.lineThrough,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -977,18 +1035,16 @@ class _CarouselHeader extends StatelessWidget {
   final VoidCallback? onNext;
   final ValueChanged<int> onTapDot;
 
-  // Paleta fixa (verde da marca), para o cabeçalho ficar igual ao protótipo
-  // independente do tema claro/escuro.
-  static const Color _background = Color(0xFF1C4A38);
-  static const Color _accent = Color(0xFF3DDC84);
-  static const Color _subtitle = Color(0xFF8FC4AC);
-
   @override
   Widget build(BuildContext context) {
+    final c = BrasaColors.of(context);
     return Material(
-      color: _background,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+      color: c.surf,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: c.line)),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
         child: Column(
           children: [
             Row(
@@ -1005,23 +1061,24 @@ class _CarouselHeader extends StatelessWidget {
                       children: [
                         Text(
                           label,
-                          style: const TextStyle(
-                            fontSize: 26,
+                          style: TextStyle(
+                            fontFamily: 'SpaceGrotesk',
+                            fontSize: 22,
                             fontWeight: FontWeight.w800,
-                            color: Colors.white,
+                            color: c.ink,
                           ),
                           textAlign: TextAlign.center,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 4),
                         Text(
                           'Item ${_pad(current + 1)} de ${_pad(total)}',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 3,
-                            color: _subtitle,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 2,
+                            color: c.sub,
                           ),
                         ),
                       ],
@@ -1035,34 +1092,34 @@ class _CarouselHeader extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                for (var i = 0; i < total; i++) ...[
-                  if (i > 0) const SizedBox(width: 10),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => onTapDot(i),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 250),
-                        height: 8,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(4),
-                          // O item atual tem cor própria (branco) e prioridade
-                          // sobre o "concluído", para ser identificável mesmo
-                          // quando todos já estão verdes.
-                          color: i == current
-                              ? Colors.white
-                              : (isComplete[i]
-                                  ? _accent
-                                  : Colors.white.withValues(alpha: 0.15)),
+            if (total > 1) ...[
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  for (var i = 0; i < total; i++) ...[
+                    if (i > 0) const SizedBox(width: 8),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => onTapDot(i),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 250),
+                          height: 7,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(4),
+                            // O item atual tem prioridade (laranja) sobre o
+                            // "concluído" (verde), para ser identificável mesmo
+                            // quando todos já estão completos.
+                            color: i == current
+                                ? c.acc
+                                : (isComplete[i] ? c.brand : c.line),
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
-              ],
-            ),
+              ),
+            ],
           ],
         ),
       ),
@@ -1088,21 +1145,22 @@ class _NavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = BrasaColors.of(context);
     final enabled = onPressed != null;
     return Tooltip(
       message: tooltip,
       child: Opacity(
         opacity: enabled ? 1 : 0.35,
         child: Material(
-          color: Colors.white.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(16),
+          color: c.elev,
+          borderRadius: BorderRadius.circular(14),
           child: InkWell(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
             onTap: onPressed,
             child: SizedBox(
-              width: 56,
-              height: 56,
-              child: Icon(icon, color: Colors.white, size: 28),
+              width: 44,
+              height: 44,
+              child: Icon(icon, color: c.ink, size: 24),
             ),
           ),
         ),
@@ -1496,6 +1554,7 @@ class _CartTile extends StatelessWidget {
     }).join(', ');
     final note = item.notes?.trim();
     return Card(
+      margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
         onTap: () => _editItem(context, cubit),
         title: Text(item.product.name),
@@ -1751,17 +1810,32 @@ class _BottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = BrasaColors.of(context);
     return Material(
-      elevation: 8,
+      color: c.surf,
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
+        top: false,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: c.line)),
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              const Text('Total: ', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text('TOTAL',
+                  style: TextStyle(
+                      color: c.sub,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                      letterSpacing: 0.6)),
+              const Spacer(),
               Text(money(state.total),
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  style: TextStyle(
+                    fontFamily: 'SpaceGrotesk',
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: c.ink,
+                  )),
             ],
           ),
         ),
