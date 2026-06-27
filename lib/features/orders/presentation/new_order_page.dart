@@ -805,6 +805,7 @@ class _MontageScreenState extends State<_MontageScreen> {
         children: [
           _CarouselHeader(
             label: _labels[_current],
+            basePrice: money(widget.units[_current].product.salePrice),
             current: _current,
             total: widget.units.length,
             isComplete: List.generate(widget.units.length, _unitComplete),
@@ -843,38 +844,10 @@ class _MontageScreenState extends State<_MontageScreen> {
   Widget _buildUnit(int i) {
     final unit = widget.units[i];
     final detail = unit.detail;
-    final c = BrasaColors.of(context);
     final removableItems = detail.recipeItems.where((r) => r.isOptional).toList();
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
-        // Header do produto: ícone tonal + nome/base.
-        Row(
-          children: [
-            const TintIcon(Icons.lunch_dining, size: 56, iconSize: 30, radius: 16),
-            const SizedBox(width: 13),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    unit.product.name,
-                    style: TextStyle(
-                      fontFamily: 'SpaceGrotesk',
-                      fontWeight: FontWeight.w700,
-                      fontSize: 18,
-                      color: c.ink,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text('Base · ${money(unit.product.salePrice)}',
-                      style: TextStyle(color: c.sub, fontSize: 12.5)),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
         // Grupos de escolha não-adicionais (sabor, molhos...) primeiro.
         for (var gi = 0; gi < detail.choiceGroups.length; gi++)
           if (detail.choiceGroups[gi].kind != ChoiceGroupKind.additional)
@@ -981,6 +954,7 @@ class _IngredientChip extends StatelessWidget {
 class _CarouselHeader extends StatelessWidget {
   const _CarouselHeader({
     required this.label,
+    required this.basePrice,
     required this.current,
     required this.total,
     required this.isComplete,
@@ -990,6 +964,7 @@ class _CarouselHeader extends StatelessWidget {
   });
 
   final String label;
+  final String basePrice;
   final int current;
   final int total;
   final List<bool> isComplete;
@@ -1032,6 +1007,11 @@ class _CarouselHeader extends StatelessWidget {
                           textAlign: TextAlign.center,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Base · $basePrice',
+                          style: TextStyle(color: c.sub, fontSize: 12.5),
                         ),
                         const SizedBox(height: 4),
                         Text(
