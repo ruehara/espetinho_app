@@ -104,7 +104,8 @@ class _OrderTile extends StatelessWidget {
               height: 44,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: c.tint,
+                color: order.isOpen
+            ? c.brand.withValues(alpha: 0.12) : c.acc.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: order.isOpen

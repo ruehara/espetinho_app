@@ -154,6 +154,7 @@ class _OrdersBanner extends StatelessWidget {
             ? 'Nenhum pedido em aberto'
             : '${state.openOrders} em aberto · Hoje ${money(state.todayTotal)}';
         return Material(
+          elevation: 3,
           borderRadius: BorderRadius.circular(22),
           clipBehavior: Clip.antiAlias,
           child: Ink(

@@ -191,7 +191,7 @@ class AppTheme {
         fillColor: WidgetStateProperty.resolveWith(
             (s) => s.contains(WidgetState.selected) ? p.acc : Colors.transparent),
         checkColor: WidgetStateProperty.all(onAcc),
-        side: BorderSide(color: p.line, width: 1.6),
+        side: BorderSide(color: p.sub, width: 1.8),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
       dialogTheme: DialogThemeData(

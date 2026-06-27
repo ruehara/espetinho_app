@@ -13,7 +13,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
   Future<AppSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
     return AppSettings(
-      storeName: prefs.getString(_kStoreName) ?? 'Meu Restaurante',
+      storeName: prefs.getString(_kStoreName) ?? 'Espeto & Brasa do Japa',
       defaultDiscount: prefs.getInt(_kDiscount) ?? 0,
       showDiscountOnClose: prefs.getBool(_kShowDiscountOnClose) ?? true,
       themeMode: ThemeMode.values[prefs.getInt(_kTheme) ?? ThemeMode.system.index],

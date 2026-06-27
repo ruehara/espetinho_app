@@ -352,9 +352,14 @@ class NewOrderCubit extends Cubit<NewOrderState> {
     final id = _currentOrderId;
     if (id == null) return const KitchenPrintOutcome.noOrder();
 
-    final delta = await _repository.computePrintDelta(
+    final kitchenDelta = await _repository.computePrintDelta(
       orderId: id,
       kind: 'kitchen',
+      items: state.items,
+    );
+    final hallDelta = await _repository.computePrintDelta(
+      orderId: id,
+      kind: 'hall',
       items: state.items,
     );
 
@@ -363,30 +368,40 @@ class NewOrderCubit extends Cubit<NewOrderState> {
     final orderNumber = await _repository.dailyOrderNumber(id);
 
     String? error;
-    if (delta.toPrint.isNotEmpty) {
+    if (kitchenDelta.toPrint.isNotEmpty) {
       error = await _printer.printKitchenComanda(
-          orderNumber: orderNumber, customerName: customerName, items: delta.toPrint);
+          orderNumber: orderNumber, customerName: customerName, items: kitchenDelta.toPrint);
     }
-    if (error == null && delta.toCancel.isNotEmpty) {
+    if (error == null && kitchenDelta.toCancel.isNotEmpty) {
       error = await _printer.printKitchenCancellation(
-          orderNumber: orderNumber, customerName: customerName, items: delta.toCancel);
+          orderNumber: orderNumber, customerName: customerName, items: kitchenDelta.toCancel);
     }
-    if (error == null && !delta.isEmpty) {
+    if (error == null && !kitchenDelta.isEmpty) {
       await _repository.markPrinted(orderId: id, kind: 'kitchen', currentItems: state.items);
     }
 
-    final hallError = error == null
-        ? await _printer.printHallComanda(
-            orderNumber: orderNumber, customerName: customerName, items: state.items)
-        : null;
+    // O salão também imprime só o que ainda não foi enviado (delta), em vez
+    // da lista completa do pedido — senão itens já confirmados em comandas
+    // anteriores (ex.: uma bebida) voltariam a sair impressos a cada novo
+    // item adicionado, confundindo o garçom.
+    String? hallError;
+    if (error == null && hallDelta.toPrint.isNotEmpty) {
+      hallError = await _printer.printHallComanda(
+          orderNumber: orderNumber, customerName: customerName, items: hallDelta.toPrint);
+      if (hallError == null) {
+        await _repository.markPrinted(orderId: id, kind: 'hall', currentItems: state.items);
+      }
+    }
 
     if (error == null && hallError == null) _markAsSaved();
 
     if (error != null) return KitchenPrintOutcome.error(error);
-    if (delta.isEmpty && hallError == null) return const KitchenPrintOutcome.nothingToPrint();
+    if (kitchenDelta.isEmpty && hallDelta.isEmpty) {
+      return const KitchenPrintOutcome.nothingToPrint();
+    }
     return KitchenPrintOutcome.success(
-      printed: delta.toPrint,
-      cancelled: delta.toCancel,
+      printed: kitchenDelta.toPrint,
+      cancelled: kitchenDelta.toCancel,
       hallError: hallError,
     );
   }

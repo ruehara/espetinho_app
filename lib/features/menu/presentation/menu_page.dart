@@ -60,6 +60,7 @@ class _CategoryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cubit = context.read<MenuCubit>();
     return Card(
+      elevation: 1.5,
       margin: const EdgeInsets.only(bottom: 12),
       child: ExpansionTile(
         title: Row(

@@ -75,6 +75,7 @@ class BrasaCard extends StatelessWidget {
     return Padding(
       padding: margin ?? EdgeInsets.zero,
       child: Material(
+        elevation: 1,
         color: color ?? c.surf,
         borderRadius: border,
         clipBehavior: Clip.antiAlias,
@@ -88,7 +89,7 @@ class BrasaCard extends StatelessWidget {
                       left: 0,
                       top: 0,
                       bottom: 0,
-                      child: Container(width: 3, color: c.acc),
+                      child: Container(width: 3, color: c.brand),
                     ),
                   ],
                 )

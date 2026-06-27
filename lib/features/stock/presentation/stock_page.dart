@@ -53,7 +53,7 @@ class _StockViewState extends State<_StockView> {
               if (low.isNotEmpty)
                 Container(
                   margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: c.accd.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(16),
@@ -63,7 +63,7 @@ class _StockViewState extends State<_StockView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(Icons.warning_amber, color: c.accd, size: 20),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 5),
                       Expanded(
                         child: Text(
                           '${low.length} item(ns) abaixo do estoque mínimo: '
@@ -87,6 +87,7 @@ class _StockViewState extends State<_StockView> {
                 if (!_collapsed.contains(category))
                   for (final p in byCategory[category]!)
                     ListTile(
+                      visualDensity: VisualDensity.compact,
                       leading: TintIcon(
                         _isLow(p)
                             ? Icons.warning_amber
@@ -238,7 +239,7 @@ class _SectionHeader extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+        padding: const EdgeInsets.fromLTRB(16, 5, 16, 4),
         child: Row(
           children: [
             Icon(

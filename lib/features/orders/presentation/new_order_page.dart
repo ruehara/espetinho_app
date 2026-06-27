@@ -299,7 +299,7 @@ class PickedProduct {
 }
 
 /// Tela de seleção (multi-select) de itens para adicionar ao pedido, com
-/// busca por nome e escolha de quantidade por produto.
+/// escolha de quantidade por produto.
 class _ItemSelectionPage extends StatefulWidget {
   const _ItemSelectionPage({required this.products, required this.categoryName});
 
@@ -314,7 +314,6 @@ class _ItemSelectionPageState extends State<_ItemSelectionPage> {
   /// Quantidade escolhida por produto (id → quantidade). Ausente quando o
   /// produto não está selecionado.
   final Map<int, double> _quantities = {};
-  String _search = '';
 
   /// Produtos não compostos sem estoque disponível não podem ser
   /// selecionados — exceto se não validam estoque (ex.: molhos, saladas).
@@ -368,13 +367,8 @@ class _ItemSelectionPageState extends State<_ItemSelectionPage> {
 
   @override
   Widget build(BuildContext context) {
-    final term = _search.trim().toLowerCase();
-    final filtered = term.isEmpty
-        ? widget.products
-        : widget.products.where((p) => p.name.toLowerCase().contains(term)).toList();
-
     final byCategory = <String, List<Product>>{};
-    for (final p in filtered) {
+    for (final p in widget.products) {
       byCategory.putIfAbsent(widget.categoryName(p.groupId), () => []).add(p);
     }
     // Ordem alfabética, mas "Bebidas" sempre por último.
@@ -389,34 +383,6 @@ class _ItemSelectionPageState extends State<_ItemSelectionPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Selecionar itens'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(60),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            child: TextField(
-              autofocus: true,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: 'Buscar produto...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _search.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () => setState(() => _search = ''),
-                      ),
-                filled: true,
-                fillColor: Theme.of(context).colorScheme.surface,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: EdgeInsets.zero,
-              ),
-              onChanged: (v) => setState(() => _search = v),
-            ),
-          ),
-        ),
       ),
       body: categories.isEmpty
           ? const Center(child: Text('Nenhum produto encontrado.'))
@@ -475,7 +441,10 @@ class _ProductPickTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final selected = quantity > 0;
     return ListTile(
+      visualDensity: VisualDensity.compact,
       dense: true,
+      horizontalTitleGap: 0,
+      contentPadding: const EdgeInsets.only(left: 0, right: 4),
       onTap: outOfStock ? null : () => onChanged(selected ? 0 : 1),
       leading: Checkbox(
         value: selected,
@@ -879,7 +848,7 @@ class _MontageScreenState extends State<_MontageScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
-        // Header do produto: ícone tonal + nome/base + stepper de quantidade.
+        // Header do produto: ícone tonal + nome/base.
         Row(
           children: [
             const TintIcon(Icons.lunch_dining, size: 56, iconSize: 30, radius: 16),
@@ -902,13 +871,6 @@ class _MontageScreenState extends State<_MontageScreen> {
                       style: TextStyle(color: c.sub, fontSize: 12.5)),
                 ],
               ),
-            ),
-            QtyStepper(
-              label: qty(_quantities[i]),
-              onDecrement: _quantities[i] > 1
-                  ? () => setState(() => _quantities[i] -= 1)
-                  : null,
-              onIncrement: () => setState(() => _quantities[i] += 1),
             ),
           ],
         ),

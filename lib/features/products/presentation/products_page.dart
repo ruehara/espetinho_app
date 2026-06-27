@@ -73,6 +73,7 @@ class _ProductsViewState extends State<_ProductsView> {
                     _GroupHeader(group, count: byCategory[category]![group]!.length),
                     for (final p in byCategory[category]![group]!)
                       ListTile(
+                        visualDensity: VisualDensity.compact,
                         leading: TintIcon(
                           p.isComposite ? Icons.lunch_dining : Icons.tapas,
                         ),
