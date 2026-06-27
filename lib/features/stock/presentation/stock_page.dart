@@ -18,8 +18,16 @@ class StockPage extends StatelessWidget {
   }
 }
 
-class _StockView extends StatelessWidget {
+class _StockView extends StatefulWidget {
   const _StockView();
+
+  @override
+  State<_StockView> createState() => _StockViewState();
+}
+
+class _StockViewState extends State<_StockView> {
+  /// Categorias que estão recolhidas (por padrão todas começam expandidas).
+  final Set<String> _collapsed = <String>{};
 
   @override
   Widget build(BuildContext context) {
@@ -51,31 +59,46 @@ class _StockView extends StatelessWidget {
                   ),
                 ),
               for (final category in categories) ...[
-                _SectionHeader(category),
-                for (final p in byCategory[category]!)
-                  ListTile(
-                    leading: Icon(
-                      _isLow(p) ? Icons.warning_amber : Icons.inventory_2_outlined,
-                      color: _isLow(p) ? Theme.of(context).colorScheme.error : null,
-                    ),
-                    title: Text(p.name),
-                    subtitle: Text('Mínimo: ${qty(p.minStock)} · custo ${money(p.costPrice)}'),
-                    trailing: Text(
-                      qty(p.stockQuantity),
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                _SectionHeader(
+                  category,
+                  count: byCategory[category]!.length,
+                  expanded: !_collapsed.contains(category),
+                  onTap: () => _toggleCategory(category),
+                ),
+                if (!_collapsed.contains(category))
+                  for (final p in byCategory[category]!)
+                    ListTile(
+                      leading: Icon(
+                        _isLow(p) ? Icons.warning_amber : Icons.inventory_2_outlined,
                         color: _isLow(p) ? Theme.of(context).colorScheme.error : null,
                       ),
+                      title: Text(p.name),
+                      subtitle: Text('Mínimo: ${qty(p.minStock)} · custo ${money(p.costPrice)}'),
+                      trailing: Text(
+                        qty(p.stockQuantity),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: _isLow(p) ? Theme.of(context).colorScheme.error : null,
+                        ),
+                      ),
+                      onTap: () => _actions(context, p),
                     ),
-                    onTap: () => _actions(context, p),
-                  ),
+                const Divider(height: 1),
               ],
             ],
           );
         },
       ),
     );
+  }
+
+  void _toggleCategory(String category) {
+    setState(() {
+      if (!_collapsed.remove(category)) {
+        _collapsed.add(category);
+      }
+    });
   }
 
   bool _isLow(Product p) => p.minStock > 0 && p.stockQuantity <= p.minStock;
@@ -175,15 +198,41 @@ class _StockView extends StatelessWidget {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader(this.title);
+  const _SectionHeader(
+    this.title, {
+    required this.count,
+    required this.expanded,
+    required this.onTap,
+  });
+
   final String title;
+  final int count;
+  final bool expanded;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-        child: Text(title,
-            style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary)),
-      );
+        child: Row(
+          children: [
+            Icon(
+              expanded ? Icons.expand_more : Icons.chevron_right,
+              color: color,
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                '$title ($count)',
+                style: TextStyle(fontWeight: FontWeight.bold, color: color),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

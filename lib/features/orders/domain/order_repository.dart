@@ -32,12 +32,31 @@ abstract class OrderRepository {
   /// informado (lista vazia significa que o estoque é suficiente).
   Future<List<String>> checkStock(CartItem item);
 
+  /// Valida a disponibilidade de estoque para um conjunto de itens ainda não
+  /// persistidos (ex.: lanches montados antes de entrarem no pedido),
+  /// considerando o consumo agregado de receitas e adicionais.
+  ///
+  /// Os itens em [replacing] têm seu impacto creditado de volta ao estoque
+  /// disponível antes da verificação — usado ao editar/substituir um item que
+  /// já está no pedido (e cujo estoque já foi abatido).
+  ///
+  /// Retorna os nomes dos insumos insuficientes (lista vazia = estoque ok).
+  Future<List<String>> checkStockForItems(
+    List<CartItem> items, {
+    List<CartItem> replacing = const [],
+  });
+
   Future<int> createOrder({
     required String customerName,
     required int discountPercent,
     required List<CartItem> items,
     bool confirm = false,
   });
+
+  /// Número sequencial do pedido dentro do dia em que foi aberto (1 para o
+  /// primeiro pedido do dia, reiniciando a cada dia). Usado no cabeçalho da
+  /// comanda.
+  Future<int> dailyOrderNumber(int orderId);
 
   /// Carrega um pedido aberto para edição.
   Future<OrderDetail> orderDetail(int orderId);

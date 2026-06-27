@@ -265,7 +265,12 @@ class _NewOrderViewState extends State<_NewOrderView> {
 
     if (montageUnits.isEmpty || !context.mounted) return;
     final configured = await Navigator.of(context).push<List<CartItem>>(
-      MaterialPageRoute(builder: (_) => _MontageScreen(units: montageUnits)),
+      MaterialPageRoute(
+        builder: (_) => _MontageScreen(
+          units: montageUnits,
+          validateStock: cubit.checkMontageStock,
+        ),
+      ),
     );
     if (configured == null || !context.mounted) return;
     for (final item in configured) {
@@ -313,18 +318,24 @@ class _ItemSelectionPageState extends State<_ItemSelectionPage> {
   bool _outOfStock(Product p) =>
       !p.isComposite && p.trackStock && p.stockQuantity <= 0;
 
-  /// Produtos não compostos com estoque abaixo do mínimo configurado.
-  bool _lowStock(Product p) =>
-      !p.isComposite && p.trackStock && p.stockQuantity > 0 && p.stockQuantity < p.minStock;
-
-  /// Exibe a quantidade em estoque, destacando em vermelho quando estiver
-  /// abaixo do mínimo configurado.
-  Widget? _stockLabel(BuildContext context, Product p) {
+  /// Exibe o estoque *disponível* (estoque atual menos a quantidade já
+  /// selecionada nesta tela), atualizando em tempo real conforme o usuário
+  /// muda a quantidade. Fica em vermelho quando zera ou cai abaixo do mínimo.
+  Widget? _stockLabel(BuildContext context, Product p, double selectedQty) {
     if (p.isComposite || !p.trackStock) return null;
-    if (p.stockQuantity <= 0) return const Text('Sem estoque');
+    final available = p.stockQuantity - selectedQty;
+    if (available <= 0) {
+      return Text(
+        'Sem estoque',
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.error,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+    }
     return Text(
-      'Estoque: ${qty(p.stockQuantity)}',
-      style: _lowStock(p)
+      'Estoque: ${qty(available)}',
+      style: available < p.minStock
           ? TextStyle(
               color: Theme.of(context).colorScheme.error,
               fontWeight: FontWeight.bold,
@@ -415,7 +426,7 @@ class _ItemSelectionPageState extends State<_ItemSelectionPage> {
                       product: p,
                       quantity: _quantities[p.id] ?? 0,
                       outOfStock: _outOfStock(p),
-                      stockLabel: _stockLabel(context, p),
+                      stockLabel: _stockLabel(context, p, _quantities[p.id] ?? 0),
                       onChanged: (q) => _setQuantity(p, q),
                     ),
                 ],
@@ -658,8 +669,17 @@ class _MontageUnit {
 /// unidade. O botão do rodapé só habilita quando todas as unidades estão
 /// completas (todos os grupos com o mínimo de seleções atingido).
 class _MontageScreen extends StatefulWidget {
-  const _MontageScreen({required this.units, this.isEditing = false});
+  const _MontageScreen({
+    required this.units,
+    required this.validateStock,
+    this.isEditing = false,
+  });
   final List<_MontageUnit> units;
+
+  /// Valida o estoque dos lanches montados antes de confirmar. Retorna a lista
+  /// de insumos insuficientes (vazia = estoque ok). Quando há falta, a tela
+  /// permanece aberta exibindo o erro, em vez de descartar a montagem.
+  final Future<List<String>> Function(List<CartItem>) validateStock;
 
   /// Quando verdadeiro, a tela está reabrindo um lanche já no carrinho para
   /// edição (ajusta título e rótulo do botão de confirmação).
@@ -729,6 +749,19 @@ class _MontageScreenState extends State<_MontageScreen> {
     return true;
   }
 
+  /// Valor da unidade [i]: preço de venda do produto + acréscimo de todas as
+  /// escolhas (sabores/adicionais) selecionadas, considerando a quantidade de
+  /// cada adicional. Recalculado a cada alteração (via setState).
+  double _unitPrice(int i) {
+    var total = widget.units[i].product.salePrice ?? 0;
+    for (final list in _selections[i].values) {
+      for (final c in list) {
+        if (c.choiceType == 'option') total += c.priceAddition * c.quantity;
+      }
+    }
+    return total;
+  }
+
   bool get _allComplete {
     for (var i = 0; i < widget.units.length; i++) {
       if (!_unitComplete(i)) return false;
@@ -736,7 +769,11 @@ class _MontageScreenState extends State<_MontageScreen> {
     return true;
   }
 
-  void _confirm() {
+  /// Verdadeiro enquanto a validação de estoque do confirmar está em curso,
+  /// para evitar disparos repetidos e desabilitar o botão.
+  bool _validating = false;
+
+  Future<void> _confirm() async {
     final result = <CartItem>[];
     for (var i = 0; i < widget.units.length; i++) {
       final unit = widget.units[i];
@@ -758,6 +795,19 @@ class _MontageScreenState extends State<_MontageScreen> {
         quantity: unit.initialQuantity,
         notes: note.isEmpty ? null : note,
       ));
+    }
+
+    // Valida o estoque do conjunto montado (receitas + adicionais) antes de
+    // confirmar; se faltar, mantém a tela aberta e avisa qual insumo faltou.
+    setState(() => _validating = true);
+    final insufficient = await widget.validateStock(result);
+    if (!mounted) return;
+    setState(() => _validating = false);
+    if (insufficient.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Estoque insuficiente: ${insufficient.join(', ')}'),
+      ));
+      return;
     }
     Navigator.pop(context, result);
   }
@@ -803,14 +853,42 @@ class _MontageScreenState extends State<_MontageScreen> {
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(12),
-            child: FilledButton.icon(
-              onPressed: _allComplete ? _confirm : null,
-              icon: const Icon(Icons.check),
-              label: Text(!_allComplete
-                  ? 'Complete todos os itens'
-                  : widget.isEditing
-                      ? 'Salvar'
-                      : 'Confirmar (${widget.units.length})'),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Valor do lanche',
+                          style: TextStyle(fontSize: 16)),
+                      Text(
+                        money(_unitPrice(_current)),
+                        style: const TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+                FilledButton.icon(
+                  onPressed: (_allComplete && !_validating) ? _confirm : null,
+                  icon: _validating
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.check),
+                  label: Text(!_allComplete
+                      ? 'Complete todos os itens'
+                      : _validating
+                          ? 'Verificando estoque...'
+                          : widget.isEditing
+                              ? 'Salvar'
+                              : 'Confirmar (${widget.units.length})'),
+                ),
+              ],
             ),
           ),
         ),
@@ -825,12 +903,14 @@ class _MontageScreenState extends State<_MontageScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // Grupos de escolha não-adicionais (sabor, molhos...) primeiro.
         for (var gi = 0; gi < detail.choiceGroups.length; gi++)
-          _buildGroup(context, setState, detail.choiceGroups[gi], gi,
-              unit.prepared.sourceProducts, unit.prepared.manualProducts,
-              _selections[i], unit.prepared.outOfStockIds,
-              showError: (_selections[i][gi]?.length ?? 0) <
-                  detail.choiceGroups[gi].minSelections),
+          if (detail.choiceGroups[gi].kind != ChoiceGroupKind.additional)
+            _buildGroup(context, setState, detail.choiceGroups[gi], gi,
+                unit.prepared.sourceProducts, unit.prepared.manualProducts,
+                _selections[i], unit.prepared.outOfStockIds,
+                showError: (_selections[i][gi]?.length ?? 0) <
+                    detail.choiceGroups[gi].minSelections),
         if (removableItems.isNotEmpty) ...[
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
@@ -851,6 +931,12 @@ class _MontageScreenState extends State<_MontageScreen> {
               }),
             ),
         ],
+        // Grupos adicionais ficam depois dos ingredientes.
+        for (var gi = 0; gi < detail.choiceGroups.length; gi++)
+          if (detail.choiceGroups[gi].kind == ChoiceGroupKind.additional)
+            _buildGroup(context, setState, detail.choiceGroups[gi], gi,
+                unit.prepared.sourceProducts, unit.prepared.manualProducts,
+                _selections[i], unit.prepared.outOfStockIds),
         const Padding(
           padding: EdgeInsets.only(top: 8),
           child: Text('Observação', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -1167,7 +1253,17 @@ Future<void> _showAdditionalsDialog(
                             : manualProducts[o.componentProductId];
                         final price =
                             _adicionalPriceAddition(component, o.priceAddition);
-                        final max = (o.quantity ?? 1);
+                        final configMax = (o.quantity ?? 1);
+                        // Adicionais que consomem um insumo controlado têm o
+                        // máximo limitado ao estoque disponível desse insumo.
+                        final tracksStock = component != null &&
+                            !component.isComposite &&
+                            component.trackStock;
+                        final available =
+                            tracksStock ? component.stockQuantity : configMax;
+                        final max = tracksStock && available < configMax
+                            ? available
+                            : configMax;
                         final outOfStock = o.componentProductId != null &&
                             outOfStockIds.contains(o.componentProductId);
                         return ListTile(
@@ -1179,6 +1275,7 @@ Future<void> _showAdditionalsDialog(
                               : Text([
                                   if (price > 0) '+${money(price)}',
                                   'máx ${qty(max)}',
+                                  if (tracksStock) 'estoque ${qty(available)}',
                                 ].join(' · ')),
                           trailing: outOfStock
                               ? null
@@ -1255,6 +1352,9 @@ Widget _buildGroup(
   }
 
   final single = group.maxSelections <= 1;
+  // Seleção obrigatória de exatamente uma opção: usa dropdown em vez de rádios.
+  final singleRequired =
+      group.minSelections == 1 && group.maxSelections == 1;
   final selected = selections[groupIndex] ?? <CartChoice>[];
 
   bool isSelected(CartChoice c) => selected.any((s) =>
@@ -1296,45 +1396,86 @@ Widget _buildGroup(
             fontSize: 12,
           ),
         ),
-      for (final option in options)
-        if (single)
-          RadioListTile<String>(
-            dense: true,
-            enabled: !_isOutOfStock(option, outOfStockIds),
-            value: '${option.selectedProductId}-${option.selectedProductName}',
-            title: Text(option.selectedProductName),
-            subtitle: _isOutOfStock(option, outOfStockIds)
-                ? const Text('Sem estoque')
-                : null,
-            secondary: option.priceAddition > 0
-                ? Text('+${money(option.priceAddition)}')
-                : null,
-          )
-        else
-          CheckboxListTile(
-            dense: true,
-            value: isSelected(option),
-            title: Text(option.selectedProductName),
-            subtitle: _isOutOfStock(option, outOfStockIds)
-                ? const Text('Sem estoque')
-                : null,
-            secondary: option.priceAddition > 0
-                ? Text('+${money(option.priceAddition)}')
-                : null,
-            onChanged: _isOutOfStock(option, outOfStockIds)
-                ? null
-                : (v) => setState(() {
-                      final list = [...(selections[groupIndex] ?? <CartChoice>[])];
-                      if (v == true) {
-                        if (list.length < group.maxSelections) list.add(option);
-                      } else {
-                        list.removeWhere((s) =>
-                            s.selectedProductName == option.selectedProductName &&
-                            s.selectedProductId == option.selectedProductId);
-                      }
-                      selections[groupIndex] = list;
-                    }),
+      if (singleRequired)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: DropdownButtonFormField<String>(
+            initialValue: groupValue,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            hint: const Text('Selecione...'),
+            items: [
+              for (final option in options)
+                DropdownMenuItem<String>(
+                  value: '${option.selectedProductId}-${option.selectedProductName}',
+                  enabled: !_isOutOfStock(option, outOfStockIds),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _isOutOfStock(option, outOfStockIds)
+                              ? '${option.selectedProductName} (sem estoque)'
+                              : option.selectedProductName,
+                        ),
+                      ),
+                      if (option.priceAddition > 0)
+                        Text('  +${money(option.priceAddition)}'),
+                    ],
+                  ),
+                ),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              final option = options.firstWhere(
+                (o) => '${o.selectedProductId}-${o.selectedProductName}' == value,
+              );
+              setState(() => selections[groupIndex] = [option]);
+            },
           ),
+        )
+      else
+        for (final option in options)
+          if (single)
+            RadioListTile<String>(
+              dense: true,
+              enabled: !_isOutOfStock(option, outOfStockIds),
+              value: '${option.selectedProductId}-${option.selectedProductName}',
+              title: Text(option.selectedProductName),
+              subtitle: _isOutOfStock(option, outOfStockIds)
+                  ? const Text('Sem estoque')
+                  : null,
+              secondary: option.priceAddition > 0
+                  ? Text('+${money(option.priceAddition)}')
+                  : null,
+            )
+          else
+            CheckboxListTile(
+              dense: true,
+              value: isSelected(option),
+              title: Text(option.selectedProductName),
+              subtitle: _isOutOfStock(option, outOfStockIds)
+                  ? const Text('Sem estoque')
+                  : null,
+              secondary: option.priceAddition > 0
+                  ? Text('+${money(option.priceAddition)}')
+                  : null,
+              onChanged: _isOutOfStock(option, outOfStockIds)
+                  ? null
+                  : (v) => setState(() {
+                        final list = [...(selections[groupIndex] ?? <CartChoice>[])];
+                        if (v == true) {
+                          if (list.length < group.maxSelections) list.add(option);
+                        } else {
+                          list.removeWhere((s) =>
+                              s.selectedProductName == option.selectedProductName &&
+                              s.selectedProductId == option.selectedProductId);
+                        }
+                        selections[groupIndex] = list;
+                      }),
+            ),
     ],
     ),
   );
@@ -1436,7 +1577,13 @@ class _CartTile extends StatelessWidget {
     );
     final result = await Navigator.of(context).push<List<CartItem>>(
       MaterialPageRoute(
-        builder: (_) => _MontageScreen(units: [unit], isEditing: true),
+        builder: (_) => _MontageScreen(
+          units: [unit],
+          isEditing: true,
+          // Credita o item atual de volta ao estoque ao validar a edição.
+          validateStock: (items) =>
+              cubit.checkMontageStock(items, replacing: [item]),
+        ),
       ),
     );
     if (result == null || result.isEmpty || !context.mounted) return;

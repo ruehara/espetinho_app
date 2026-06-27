@@ -30,117 +30,165 @@ Future<void> seedDatabase(AppDatabase db) async {
 
     // ----- Grupos de produtos -----
     b.insertAll(db.groupProducts, [
-      GroupProductsCompanion.insert(id: const Value(1), name: 'Bebidas', categoryId: 1),
-      GroupProductsCompanion.insert(id: const Value(2), name: 'Espetos', categoryId: 2),
-      GroupProductsCompanion.insert(
-          id: const Value(3), name: 'Espeto no Pão', categoryId: 3),
-      GroupProductsCompanion.insert(id: const Value(4), name: 'Hambúrguer', categoryId: 3),
-      GroupProductsCompanion.insert(id: const Value(5), name: 'Insumos', categoryId: 4),
+      _grupo(1, 'Agua/Refris', 1),
+      _grupo(2, 'Espetos', 2),
+      _grupo(3, 'Espeto no Pão', 3),
+      _grupo(4, 'Hambúrguer', 3),
+      _grupo(6, 'Bebidas Alcoólicas', 1),
+      _grupo(7, 'Pães', 4),
+      _grupo(8, 'Carnes/Embutidos', 4),
+      _grupo(9, 'Queijos', 4),
+      _grupo(10, 'Molhos', 4),
+      _grupo(11, 'Saladas', 4),
     ]);
 
-    // ----- Bebidas -----
+    // ----- Produtos -----
     b.insertAll(db.products, [
-      _bebida(1, 'Água sem gás 500ml', 0.80, 4.00, 12),
-      _bebida(2, 'Água com gás 500ml', 1.00, 4.50, 12),
-      _bebida(3, 'Coca-Cola lata 350ml', 2.30, 6.00, 12),
-      _bebida(6, 'Fanta Laranja lata 350ml', 1.80, 5.50, 12),
-      _bebida(10, 'Heineken long neck 330ml', 4.20, 10.00, 12),
-    ]);
-
-    // ----- Insumos internos -----
-    b.insertAll(db.products, [
-      _insumo(13, 'Pão de Hamburguer', 1.20, 12),
-      _insumo(14, 'Pão de Espeto', 0.50, 20),
-      _insumo(15, 'Carne Bovina 150g', 4.50, 20),
-      _insumo(17, 'Queijo Cheddar', 1.50, 20),
-      _insumo(18, 'Queijo Mussarela', 1.20, 20),
-      _insumo(19, 'Cebola caramelizada', 1.20, 20),
-    ]);
-
-    // ----- Produtos-sabor: Espetos -----
-    b.insertAll(db.products, [
-      _espeto(28, 'Espeto de FranBacon', 'Espeto grelhado de franbacon', 2.50, 8.00),
-      _espeto(29, 'Espeto de Contra-Filé', 'Espeto grelhado de carne bovina', 3.00, 8.00, stock: 20),
-      _espeto(31, 'Espeto de Linguiça', 'Espeto grelhado de linguiça', 2.50, 8.00),
-      _espeto(32, 'Espeto de Queijo Coalho', 'Espeto grelhado de queijo coalho', 2.80, 9.50),
-      _espeto(39, 'Espeto de Fraldinha', null, 2.00, 12.00, stock: 3, minStock: 3),
-    ]);
-
-    // ----- Compostos: Espeto no Pão + Burguer -----
-    b.insertAll(db.products, [
-      _composto(33, 'Espeto no Pão',
-          'Espeto grelhado dentro do pão com molhos à escolha', 10.00, 28.00, 3),
-      _composto(38, 'Burguer',
-          'Pão brioche, hamburguer de 150g, cheddar derretido e cebola caramelizada', 10.00, 28.00, 4),
+      // Bebidas
+      _prod(40, 'Heineken Long Neck 269ml', 6,
+          cost: 4.5, sale: 8.0, stock: 12, minStock: 5, location: 'hall'),
+      _prod(41, 'Água sem gás 500ml', 1,
+          cost: 1.2, sale: 4.0, stock: 12, minStock: 5, location: 'hall'),
+      _prod(42, 'Água com gás 500ml', 1,
+          cost: 1.75, sale: 5.0, stock: 12, minStock: 5, location: 'hall'),
+      _prod(43, 'Coca-Cola 350ml', 1,
+          cost: 2.2, sale: 4.0, stock: 12, minStock: 5),
+      _prod(44, 'Coca-Cola Zero 350ml', 1,
+          cost: 2.0, sale: 4.0, stock: 12, location: 'hall'),
+      _prod(45, 'Sprite 350ml', 1,
+          cost: 2.0, sale: 4.0, stock: 6, minStock: 5, location: 'hall'),
+      _prod(46, 'Sprite Zero 350 ml', 1,
+          cost: 2.0, sale: 4.0, stock: 6, minStock: 5, location: 'hall'),
+      // Espetos
+      _prod(47, 'Espeto Contra-Filé', 2,
+          cost: 5.0, sale: 12.0, stock: 18, minStock: 5),
+      _prod(48, 'Espeto Fraldinha', 2,
+          cost: 5.0, sale: 12.0, stock: 19, minStock: 5),
+      _prod(49, 'Espeto FranBacon', 2,
+          cost: 5.0, sale: 12.0, stock: 20, minStock: 5),
+      _prod(50, 'Espeto Linguiça', 2,
+          cost: 5.0, sale: 12.0, stock: 19, minStock: 5),
+      _prod(51, 'Espeto Queijo Coalho', 2,
+          cost: 4.0, sale: 12.0, stock: 20, minStock: 5),
+      // Insumos internos
+      _prod(52, 'Pão Baguete ', 7,
+          cost: 2.0, sale: 2.0, internal: true, stock: 16, minStock: 5),
+      _prod(53, 'Pão Brioche', 7,
+          cost: 2.0, sale: 2.0, internal: true, stock: 18, minStock: 5),
+      _prod(54, 'Carne Hamburguer 150g', 8,
+          cost: 4.5, sale: 8.0, internal: true, stock: 17, minStock: 5),
+      _prod(55, 'Bacon Fatia', 8,
+          cost: 1.0, sale: 3.0, internal: true, stock: 14, minStock: 5),
+      _prod(56, 'Cebola caramelizada', 11,
+          internal: true, track: false),
+      _prod(57, 'Vinagrete', 11, internal: true, track: false),
+      _prod(58, 'Barcebue', 10, internal: true, track: false),
+      _prod(59, 'Maionese de Alho', 10, internal: true, track: false),
+      _prod(60, 'Maionese Verde', 10, internal: true, track: false),
+      _prod(61, 'Queijo Mussarela', 9,
+          cost: 1.0, sale: 3.0, internal: true, stock: 12, minStock: 5),
+      _prod(62, 'Queijo Cheddar', 9,
+          cost: 1.0, sale: 3.0, internal: true, stock: 18, minStock: 5),
+      // Compostos
+      _prod(63, 'Espeto no Pão', 3,
+          cost: 4.0, sale: 28.0, composite: true, minStock: 5),
+      _prod(64, 'Hamburguer', 4,
+          cost: 9.5, sale: 34.0, composite: true, minStock: 5),
     ]);
 
     // ----- Receitas (recipe_items) -----
     b.insertAll(db.recipeItems, [
-      _recipe(40, 38, 13, 1),
-      _recipe(41, 38, 15, 1),
-      _recipe(42, 38, 17, 1),
-      _recipe(47, 33, 14, 1),
+      // Hamburguer (64)
+      _recipe(61, 64, 53, 1),
+      _recipe(62, 64, 55, 2),
+      _recipe(63, 64, 62, 1),
+      _recipe(64, 64, 54, 1),
+      _recipe(65, 64, 56, 1, optional: true),
+      // Espeto no Pão (63)
+      _recipe(66, 63, 52, 1),
+      _recipe(67, 63, 61, 2),
+      _recipe(68, 63, 57, 1, optional: true),
     ]);
 
     // ----- Grupos de escolha -----
     b.insertAll(db.recipeChoiceGroups, [
       RecipeChoiceGroupsCompanion.insert(
-          id: const Value(10), productId: 38, name: 'Adicionais',
-          minSelections: const Value(0), maxSelections: const Value(4), displayOrder: const Value(0)),
+          id: const Value(24), productId: 64, name: 'Adicionais',
+          minSelections: const Value(0), maxSelections: const Value(99),
+          displayOrder: const Value(0), kind: const Value('additional')),
       RecipeChoiceGroupsCompanion.insert(
-          id: const Value(18), productId: 33, name: 'Sabor',
-          sourceGroupId: const Value(2),
-          minSelections: const Value(1), maxSelections: const Value(1), displayOrder: const Value(0)),
+          id: const Value(25), productId: 63, name: 'Espeto',
+          minSelections: const Value(1), maxSelections: const Value(1),
+          displayOrder: const Value(0), kind: const Value('optional')),
       RecipeChoiceGroupsCompanion.insert(
-          id: const Value(19), productId: 33, name: 'Molho',
-          sourceGroupId: const Value(5),
-          minSelections: const Value(0), maxSelections: const Value(3), displayOrder: const Value(1)),
+          id: const Value(26), productId: 63, name: 'Molhos',
+          minSelections: const Value(0), maxSelections: const Value(3),
+          displayOrder: const Value(1), kind: const Value('optional')),
+      RecipeChoiceGroupsCompanion.insert(
+          id: const Value(27), productId: 63, name: 'Adicionais',
+          minSelections: const Value(0), maxSelections: const Value(99),
+          displayOrder: const Value(2), kind: const Value('additional')),
+    ]);
+
+    // ----- Grupos-fonte dos grupos de escolha (N:N) -----
+    b.insertAll(db.recipeChoiceGroupSources, [
+      RecipeChoiceGroupSourcesCompanion.insert(
+          id: const Value(5), groupId: 25, sourceGroupId: 2),
+      RecipeChoiceGroupSourcesCompanion.insert(
+          id: const Value(6), groupId: 26, sourceGroupId: 10),
     ]);
 
     // ----- Opções de escolha -----
     b.insertAll(db.recipeChoiceOptions, [
-      _opt(31, 10, 'Carne extra', component: 15, qty: 1, price: 5.00, order: 0),
-      _opt(32, 10, 'Cebola Caramelizada', price: 1.50, order: 1),
-      _opt(45, 19, 'Maionese de alho', order: 0),
-      _opt(46, 19, 'Barbecue', order: 1),
-      _opt(47, 19, 'Maionese verde', order: 2),
+      // Adicionais do Hamburguer (24)
+      _opt(48, 24, 'Bacon Fatia', component: 55, qty: 4, price: 3.0, order: 0),
+      _opt(49, 24, 'Carne Hamburguer 150g', component: 54, qty: 4, price: 8.0, order: 1),
+      _opt(50, 24, 'Queijo Cheddar', component: 62, qty: 4, price: 3.0, order: 2),
+      _opt(51, 24, 'Queijo Mussarela', component: 61, qty: 4, price: 3.0, order: 3),
+      // Adicionais do Espeto no Pão (27)
+      _opt(52, 27, 'Espeto Contra-Filé', component: 47, qty: 1, price: 12.0, order: 0),
+      _opt(53, 27, 'Espeto Fraldinha', component: 48, qty: 1, price: 12.0, order: 1),
+      _opt(54, 27, 'Espeto FranBacon', component: 49, qty: 1, price: 12.0, order: 2),
+      _opt(55, 27, 'Espeto Linguiça', component: 50, qty: 1, price: 12.0, order: 3),
+      _opt(56, 27, 'Espeto Queijo Coalho', component: 51, qty: 1, price: 12.0, order: 4),
+      _opt(57, 27, 'Bacon Fatia', component: 55, qty: 4, price: 3.0, order: 5),
     ]);
   });
 }
 
-ProductsCompanion _bebida(int id, String name, double cost, double sale, double stock) =>
+GroupProductsCompanion _grupo(int id, String name, int categoryId) =>
+    GroupProductsCompanion.insert(
+        id: Value(id), name: name, categoryId: categoryId);
+
+ProductsCompanion _prod(
+  int id,
+  String name,
+  int groupId, {
+  double cost = 0,
+  double sale = 0,
+  bool internal = false,
+  double stock = 0,
+  double minStock = 0,
+  bool composite = false,
+  String location = 'kitchen',
+  bool track = true,
+}) =>
     ProductsCompanion.insert(
-      id: Value(id), name: name, groupId: 1,
-      costPrice: Value(cost), salePrice: Value(sale), stockQuantity: Value(stock),
-      preparationLocation: const Value('hall'),
+      id: Value(id),
+      name: name,
+      groupId: groupId,
+      costPrice: Value(cost),
+      salePrice: Value(sale),
+      isInternalUse: Value(internal),
+      stockQuantity: Value(stock),
+      minStock: Value(minStock),
+      isComposite: Value(composite),
+      preparationLocation: Value(location),
+      trackStock: Value(track),
     );
 
-ProductsCompanion _insumo(int id, String name, double cost, double stock) =>
-    ProductsCompanion.insert(
-      id: Value(id), name: name, groupId: 5,
-      costPrice: Value(cost), stockQuantity: Value(stock),
-      isInternalUse: const Value(true),
-    );
-
-ProductsCompanion _espeto(int id, String name, String? desc, double cost, double sale,
-        {double stock = 0, double minStock = 0}) =>
-    ProductsCompanion.insert(
-      id: Value(id), name: name,
-      description: desc == null ? const Value.absent() : Value(desc),
-      groupId: 2,
-      costPrice: Value(cost), salePrice: Value(sale),
-      stockQuantity: Value(stock), minStock: Value(minStock),
-      preparationLocation: const Value('kitchen'),
-    );
-
-ProductsCompanion _composto(int id, String name, String desc, double cost, double sale, int groupId) =>
-    ProductsCompanion.insert(
-      id: Value(id), name: name, description: Value(desc), groupId: groupId,
-      costPrice: Value(cost), salePrice: Value(sale), isComposite: const Value(true),
-      preparationLocation: const Value('kitchen'),
-    );
-
-RecipeItemsCompanion _recipe(int id, int productId, int ingredientId, double qty, {bool optional = false}) =>
+RecipeItemsCompanion _recipe(int id, int productId, int ingredientId, double qty,
+        {bool optional = false}) =>
     RecipeItemsCompanion.insert(
       id: Value(id), productId: productId, ingredientId: ingredientId, quantity: qty,
       isOptional: Value(optional),

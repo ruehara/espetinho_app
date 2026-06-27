@@ -29,12 +29,4 @@ class ReportRepositoryImpl implements ReportRepository {
     final p = await _dao.profitSummary(from, to);
     return ProfitReport(p.revenue, p.cost);
   }
-
-  @override
-  Future<List<StockItem>> stock() async {
-    final rows = await _dao.stockPosition();
-    return rows
-        .map((r) => StockItem(r.name, r.stockQuantity, r.minStock))
-        .toList();
-  }
 }

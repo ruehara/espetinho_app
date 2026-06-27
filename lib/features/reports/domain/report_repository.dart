@@ -27,17 +27,8 @@ class ProfitReport {
   double get margin => revenue == 0 ? 0 : profit / revenue * 100;
 }
 
-class StockItem {
-  StockItem(this.name, this.stock, this.minStock);
-  final String name;
-  final double stock;
-  final double minStock;
-  bool get isLow => minStock > 0 && stock <= minStock;
-}
-
 abstract class ReportRepository {
   Future<SalesReport> sales(DateTime from, DateTime to);
   Future<List<TopProductItem>> topProducts(DateTime from, DateTime to);
   Future<ProfitReport> profit(DateTime from, DateTime to);
-  Future<List<StockItem>> stock();
 }

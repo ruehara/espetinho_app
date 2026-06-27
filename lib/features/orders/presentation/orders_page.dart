@@ -43,8 +43,8 @@ class _OrdersView extends StatelessWidget {
           if (state.loading) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (state.orders.isEmpty) {
-            return const Center(child: Text('Nenhum pedido ainda.'));
+          if (state.open.isEmpty && state.closed.isEmpty) {
+            return const Center(child: Text('Nenhum pedido hoje.'));
           }
           return ListView(
             padding: const EdgeInsets.only(bottom: 80),
@@ -110,9 +110,24 @@ class _OrderTile extends StatelessWidget {
                 final detail = await sl<OrderRepository>().orderDetail(order.id);
                 if (!context.mounted) return;
                 final discount = await _closeDialog(context, order, detail.items);
-                if (discount != null) {
-                  await cubit.closeOrder(order.id, discountPercent: discount);
-                }
+                if (discount == null) return;
+                await cubit.closeOrder(order.id, discountPercent: discount);
+                if (!context.mounted) return;
+                // Após fechar, imprime a conta com o desconto aplicado. Se a
+                // impressora não conectar, printBill reporta ao monitor e o
+                // PrinterConnectionGuard global exibe o alerta.
+                final gross =
+                    detail.items.fold(0.0, (s, i) => s + i.lineTotal);
+                final closed = OrderSummary(
+                  id: order.id,
+                  customerName: order.customerName,
+                  status: 'closed',
+                  openedAt: order.openedAt,
+                  closedAt: DateTime.now(),
+                  total: gross * (1 - discount / 100),
+                  discountPercent: discount,
+                );
+                await _sendBill(context, closed, detail.items);
               },
             ),
             IconButton(
@@ -134,13 +149,21 @@ class _OrderTile extends StatelessWidget {
   Future<void> _printBill(BuildContext context, OrderSummary order) async {
     final detail = await sl<OrderRepository>().orderDetail(order.id);
     if (!context.mounted) return;
+    await _sendBill(context, order, detail.items);
+  }
+
+  /// Envia a conta para impressão, exibindo o indicador de progresso e o
+  /// resultado num SnackBar. Falhas de conexão são reportadas ao monitor
+  /// (pelo printBill), disparando o alerta global da impressora.
+  Future<void> _sendBill(
+      BuildContext context, OrderSummary order, List<CartItem> items) async {
     final storeName = context.read<SettingsCubit>().state.storeName;
     final error = await runWithPrintingIndicator(
       context,
       () => sl<PrinterRepository>().printBill(
         storeName: storeName,
         order: order,
-        items: detail.items,
+        items: items,
       ),
       message: 'Enviando conta para impressão...',
     );

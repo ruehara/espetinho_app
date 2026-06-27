@@ -12,8 +12,22 @@ class OrdersState extends Equatable {
   final List<OrderSummary> orders;
   final bool loading;
 
+  /// Verdadeiro se [date] cai no dia de hoje.
+  static bool _isToday(DateTime date) {
+    final now = DateTime.now();
+    return date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day;
+  }
+
+  /// Pedidos abertos — de qualquer dia, para que pedidos abertos em dias
+  /// anteriores e ainda não fechados continuem visíveis para fechamento.
   List<OrderSummary> get open => orders.where((o) => o.isOpen).toList();
-  List<OrderSummary> get closed => orders.where((o) => !o.isOpen).toList();
+
+  /// Pedidos fechados hoje (pelo horário de fechamento).
+  List<OrderSummary> get closed => orders
+      .where((o) => !o.isOpen && _isToday(o.closedAt ?? o.openedAt))
+      .toList();
 
   OrdersState copyWith({List<OrderSummary>? orders, bool? loading}) =>
       OrdersState(orders: orders ?? this.orders, loading: loading ?? this.loading);

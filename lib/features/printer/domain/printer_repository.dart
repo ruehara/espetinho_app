@@ -21,6 +21,7 @@ abstract class PrinterRepository {
   /// Imprime a comanda de preparo (cozinha) com os itens do pedido.
   /// Retorna uma mensagem de erro, ou null em caso de sucesso.
   Future<String?> printKitchenComanda({
+    required int orderNumber,
     required String customerName,
     required List<CartItem> items,
   });
@@ -28,6 +29,7 @@ abstract class PrinterRepository {
   /// Imprime a comanda do salão (confirmação do garçom) com os itens do pedido.
   /// Retorna uma mensagem de erro, ou null em caso de sucesso.
   Future<String?> printHallComanda({
+    required int orderNumber,
     required String customerName,
     required List<CartItem> items,
   });
@@ -37,6 +39,7 @@ abstract class PrinterRepository {
   /// porque foram removidos/reduzidos do pedido após já impressos.
   /// Retorna uma mensagem de erro, ou null em caso de sucesso.
   Future<String?> printKitchenCancellation({
+    required int orderNumber,
     required String customerName,
     required List<CartItem> items,
   });

@@ -98,12 +98,4 @@ class ReportDao extends DatabaseAccessor<AppDatabase> with _$ReportDaoMixin {
     ).getSingle();
     return ProfitSummary(row.read<double>('rev'), row.read<double>('cost'));
   }
-
-  /// Posição de estoque (produtos não compostos que controlam estoque, com
-  /// quantidade e mínimo). Produtos com `track_stock = false` não têm estoque
-  /// validado, então são omitidos do relatório.
-  Future<List<ProductRow>> stockPosition() => (select(products)
-        ..where((p) => p.isComposite.equals(false) & p.trackStock.equals(true))
-        ..orderBy([(p) => OrderingTerm(expression: p.name)]))
-      .get();
 }

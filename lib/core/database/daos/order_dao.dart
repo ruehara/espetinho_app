@@ -45,6 +45,23 @@ class OrderDao extends DatabaseAccessor<AppDatabase> with _$OrderDaoMixin {
   Future<OrderRow?> getOrder(int orderId) =>
       (select(orders)..where((o) => o.id.equals(orderId))).getSingleOrNull();
 
+  /// Posição do pedido entre os abertos no mesmo dia (1-based), reiniciando a
+  /// cada dia. Conta os pedidos do mesmo dia com id menor ou igual ao informado.
+  Future<int> dailyOrderNumber(int orderId) async {
+    final order = await getOrder(orderId);
+    if (order == null) return orderId;
+    final dayStart =
+        DateTime(order.openedAt.year, order.openedAt.month, order.openedAt.day);
+    final dayEnd = dayStart.add(const Duration(days: 1));
+    final sameDay = await (select(orders)
+          ..where((o) =>
+              o.openedAt.isBiggerOrEqualValue(dayStart) &
+              o.openedAt.isSmallerThanValue(dayEnd) &
+              o.id.isSmallerOrEqualValue(orderId)))
+        .get();
+    return sameDay.length;
+  }
+
   Future<List<OrderItemRow>> itemsFor(int orderId) =>
       (select(orderItems)..where((i) => i.orderId.equals(orderId))).get();
 

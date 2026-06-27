@@ -148,6 +148,16 @@ class NewOrderCubit extends Cubit<NewOrderState> {
 
   Future<Product?> productById(int id) => _repository.productById(id);
 
+  /// Valida o estoque de um conjunto de lanches montados antes de adicioná-los
+  /// ao pedido, considerando o consumo agregado de receitas e adicionais. Ao
+  /// editar um item já no carrinho, informe-o em [replacing] para creditar o
+  /// estoque já abatido. Retorna a lista de insumos insuficientes (vazia = ok).
+  Future<List<String>> checkMontageStock(
+    List<CartItem> items, {
+    List<CartItem> replacing = const [],
+  }) =>
+      _repository.checkStockForItems(items, replacing: replacing);
+
   /// Define o nome do cliente e persiste no banco. Caso o pedido ainda não
   /// tenha sido criado, cria um pedido vazio para que ele já apareça na
   /// lista de pedidos abertos.
@@ -208,7 +218,8 @@ class NewOrderCubit extends Cubit<NewOrderState> {
   /// Retorna uma mensagem de erro se o estoque for insuficiente, ou `null`
   /// em caso de sucesso.
   Future<String?> replaceItem(int index, CartItem item) async {
-    final insufficient = await _repository.checkStock(item);
+    final insufficient = await _repository
+        .checkStockForItems([item], replacing: [state.items[index]]);
     if (insufficient.isNotEmpty) {
       return 'Estoque insuficiente: ${insufficient.join(', ')}';
     }
@@ -349,15 +360,16 @@ class NewOrderCubit extends Cubit<NewOrderState> {
 
     final customerName =
         state.customerName.trim().isEmpty ? 'Sem nome' : state.customerName.trim();
+    final orderNumber = await _repository.dailyOrderNumber(id);
 
     String? error;
     if (delta.toPrint.isNotEmpty) {
       error = await _printer.printKitchenComanda(
-          customerName: customerName, items: delta.toPrint);
+          orderNumber: orderNumber, customerName: customerName, items: delta.toPrint);
     }
     if (error == null && delta.toCancel.isNotEmpty) {
       error = await _printer.printKitchenCancellation(
-          customerName: customerName, items: delta.toCancel);
+          orderNumber: orderNumber, customerName: customerName, items: delta.toCancel);
     }
     if (error == null && !delta.isEmpty) {
       await _repository.markPrinted(orderId: id, kind: 'kitchen', currentItems: state.items);
@@ -365,7 +377,7 @@ class NewOrderCubit extends Cubit<NewOrderState> {
 
     final hallError = error == null
         ? await _printer.printHallComanda(
-            customerName: customerName, items: state.items)
+            orderNumber: orderNumber, customerName: customerName, items: state.items)
         : null;
 
     if (error == null && hallError == null) _markAsSaved();

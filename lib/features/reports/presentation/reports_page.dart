@@ -40,7 +40,6 @@ class _ReportsView extends StatelessWidget {
                       _salesCard(context, state),
                       _profitCard(context, state),
                       _topProductsCard(context, state),
-                      _stockCard(context, state),
                     ],
                   ),
                 ),
@@ -120,38 +119,6 @@ class _ReportsView extends StatelessWidget {
     );
   }
 
-  Widget _stockCard(BuildContext context, ReportsState state) {
-    final low = state.stock.where((s) => s.isLow).toList();
-    return _ReportCard(
-      title: 'Posição de estoque',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (low.isNotEmpty)
-            Text('${low.length} item(ns) abaixo do mínimo',
-                style: TextStyle(color: Theme.of(context).colorScheme.error)),
-          const SizedBox(height: 4),
-          for (final s in state.stock)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(child: Text(s.name)),
-                  Text(
-                    '${qty(s.stock)}${s.minStock > 0 ? ' / mín ${qty(s.minStock)}' : ''}',
-                    style: TextStyle(
-                      color: s.isLow ? Theme.of(context).colorScheme.error : null,
-                      fontWeight: s.isLow ? FontWeight.bold : null,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
 }
 
 class _RangeBar extends StatelessWidget {

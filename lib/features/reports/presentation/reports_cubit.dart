@@ -11,7 +11,6 @@ class ReportsState extends Equatable {
     this.sales,
     this.topProducts = const [],
     this.profit,
-    this.stock = const [],
   });
 
   final DateTime from;
@@ -20,7 +19,6 @@ class ReportsState extends Equatable {
   final SalesReport? sales;
   final List<TopProductItem> topProducts;
   final ProfitReport? profit;
-  final List<StockItem> stock;
 
   ReportsState copyWith({
     DateTime? from,
@@ -29,7 +27,6 @@ class ReportsState extends Equatable {
     SalesReport? sales,
     List<TopProductItem>? topProducts,
     ProfitReport? profit,
-    List<StockItem>? stock,
   }) =>
       ReportsState(
         from: from ?? this.from,
@@ -38,12 +35,11 @@ class ReportsState extends Equatable {
         sales: sales ?? this.sales,
         topProducts: topProducts ?? this.topProducts,
         profit: profit ?? this.profit,
-        stock: stock ?? this.stock,
       );
 
   @override
   List<Object?> get props =>
-      [from, to, loading, sales, topProducts, profit, stock];
+      [from, to, loading, sales, topProducts, profit];
 }
 
 class ReportsCubit extends Cubit<ReportsState> {
@@ -69,13 +65,11 @@ class ReportsCubit extends Cubit<ReportsState> {
     final sales = await _repository.sales(from, to);
     final top = await _repository.topProducts(from, to);
     final profit = await _repository.profit(from, to);
-    final stock = await _repository.stock();
     emit(state.copyWith(
       loading: false,
       sales: sales,
       topProducts: top,
       profit: profit,
-      stock: stock,
     ));
   }
 }

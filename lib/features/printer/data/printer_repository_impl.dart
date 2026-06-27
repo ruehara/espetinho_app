@@ -117,6 +117,7 @@ class PrinterRepositoryImpl implements PrinterRepository {
 
   @override
   Future<String?> printKitchenComanda({
+    required int orderNumber,
     required String customerName,
     required List<CartItem> items,
   }) async {
@@ -125,7 +126,8 @@ class PrinterRepositoryImpl implements PrinterRepository {
     final config = await loadConfig();
     final printer = config.kitchenPrinter;
     final doc = await _buildComanda(
-      title: 'COMANDA - COZINHA',
+      orderNumber: orderNumber,
+      station: 'COZINHA',
       customerName: customerName,
       items: kitchenItems,
       paperSize: config.paperSize,
@@ -140,6 +142,7 @@ class PrinterRepositoryImpl implements PrinterRepository {
 
   @override
   Future<String?> printHallComanda({
+    required int orderNumber,
     required String customerName,
     required List<CartItem> items,
   }) async {
@@ -149,7 +152,8 @@ class PrinterRepositoryImpl implements PrinterRepository {
     final config = await loadConfig();
     final printer = config.hallPrinter;
     final doc = await _buildComanda(
-      title: 'COMANDA - SALAO',
+      orderNumber: orderNumber,
+      station: 'SALAO',
       customerName: customerName,
       items: hallItems,
       paperSize: config.paperSize,
@@ -238,7 +242,7 @@ class PrinterRepositoryImpl implements PrinterRepository {
       for (final choice in item.choices) {
         final label = choice.choiceType == 'removal'
             ? '  sem ${choice.selectedProductName}'
-            : '  ${_choiceQtyPrefix(choice)}${choice.selectedProductName}';
+            : '  ${_isAdditionalChoice(choice) ? '++ ' : ''}${_choiceQtyPrefix(choice)}${choice.selectedProductName}';
         bytes.addAll(generator.text(label, styles: const PosStyles(height: PosTextSize.size1)));
         text.writeln(label);
       }
@@ -297,6 +301,7 @@ class PrinterRepositoryImpl implements PrinterRepository {
 
   @override
   Future<String?> printKitchenCancellation({
+    required int orderNumber,
     required String customerName,
     required List<CartItem> items,
   }) async {
@@ -305,6 +310,7 @@ class PrinterRepositoryImpl implements PrinterRepository {
     final config = await loadConfig();
     final printer = config.kitchenPrinter;
     final doc = await _buildCancellationComanda(
+      orderNumber: orderNumber,
       customerName: customerName,
       items: kitchenItems,
       paperSize: config.paperSize,
@@ -318,6 +324,7 @@ class PrinterRepositoryImpl implements PrinterRepository {
   }
 
   Future<_PrintDoc> _buildCancellationComanda({
+    required int orderNumber,
     required String customerName,
     required List<CartItem> items,
     required PrinterPaperSize paperSize,
@@ -326,16 +333,11 @@ class PrinterRepositoryImpl implements PrinterRepository {
     final bytes = <int>[];
     final text = StringBuffer();
 
-    bytes.addAll(generator.text(
-      '*** CANCELAMENTO / AJUSTE ***',
-      styles: const PosStyles(
-        align: PosAlign.center,
-        bold: true,
-        height: PosTextSize.size2,
-        width: PosTextSize.size2,
-      ),
-    ));
-    text.writeln(_center('*** CANCELAMENTO / AJUSTE ***', paperSize));
+    _appendComandaHeader(generator, bytes, text,
+        orderNumber: orderNumber,
+        station: '*** CANCELAMENTO / AJUSTE ***',
+        customerName: customerName,
+        paperSize: paperSize);
     bytes.addAll(generator.text('Cliente: $customerName', styles: const PosStyles(bold: true)));
     text.writeln('Cliente: $customerName');
     bytes.addAll(generator.text(dateTimeLabel(DateTime.now())));
@@ -345,14 +347,14 @@ class PrinterRepositoryImpl implements PrinterRepository {
 
     for (final item in items) {
       bytes.addAll(generator.text(
-        'NAO PREPARAR: ${qty(item.quantity)}x ${item.product.name}',
+        'CANCELADO: ${qty(item.quantity)}x ${item.product.name}',
         styles: const PosStyles(bold: true, height: PosTextSize.size2, width: PosTextSize.size2),
       ));
-      text.writeln('NAO PREPARAR: ${qty(item.quantity)}x ${item.product.name}');
+      text.writeln('CANCELADO: ${qty(item.quantity)}x ${item.product.name}');
       for (final choice in item.choices) {
         final label = choice.choiceType == 'removal'
             ? '   >> SEM ${choice.selectedProductName.toUpperCase()}'
-            : '   >> ${_choiceQtyPrefix(choice)}${choice.selectedProductName}';
+            : '   ${_isAdditionalChoice(choice) ? '++' : '>>'} ${_choiceQtyPrefix(choice)}${choice.selectedProductName}';
         bytes.addAll(generator.text(label, styles: const PosStyles(bold: true)));
         text.writeln(label);
       }
@@ -367,7 +369,8 @@ class PrinterRepositoryImpl implements PrinterRepository {
   }
 
   Future<_PrintDoc> _buildComanda({
-    required String title,
+    required int orderNumber,
+    required String station,
     required String customerName,
     required List<CartItem> items,
     required PrinterPaperSize paperSize,
@@ -377,16 +380,11 @@ class PrinterRepositoryImpl implements PrinterRepository {
     final bytes = <int>[];
     final text = StringBuffer();
 
-    bytes.addAll(generator.text(
-      title,
-      styles: const PosStyles(
-        align: PosAlign.center,
-        bold: true,
-        height: PosTextSize.size2,
-        width: PosTextSize.size2,
-      ),
-    ));
-    text.writeln(_center(title, paperSize));
+    _appendComandaHeader(generator, bytes, text,
+        orderNumber: orderNumber,
+        station: station,
+        customerName: customerName,
+        paperSize: paperSize);
     bytes.addAll(generator.text('Cliente: $customerName', styles: const PosStyles(bold: true)));
     text.writeln('Cliente: $customerName');
     bytes.addAll(generator.text(dateTimeLabel(DateTime.now())));
@@ -403,7 +401,7 @@ class PrinterRepositoryImpl implements PrinterRepository {
       for (final choice in item.choices) {
         final label = choice.choiceType == 'removal'
             ? '   >> SEM ${choice.selectedProductName.toUpperCase()}'
-            : '   >> ${_choiceQtyPrefix(choice)}${choice.selectedProductName}';
+            : '   ${_isAdditionalChoice(choice) ? '++' : '>>'} ${_choiceQtyPrefix(choice)}${choice.selectedProductName}';
         bytes.addAll(generator.text(label, styles: const PosStyles(bold: true)));
         text.writeln(label);
       }
@@ -437,6 +435,36 @@ class PrinterRepositoryImpl implements PrinterRepository {
   }
 
   /// Imprime a observação livre do item (ex.: "bem passado"), quando houver.
+  /// Cabeçalho da comanda: "PEDIDO {n} - {CLIENTE}" em caixa alta e fonte
+  /// grande (dupla largura/altura) para leitura à distância, seguido do
+  /// destino (COZINHA/SALAO) centralizado.
+  void _appendComandaHeader(
+    Generator generator,
+    List<int> bytes,
+    StringBuffer text, {
+    required int orderNumber,
+    required String station,
+    required String customerName,
+    required PrinterPaperSize paperSize,
+  }) {
+    final title = 'PEDIDO $orderNumber - ${customerName.toUpperCase()}';
+    bytes.addAll(generator.text(
+      title,
+      styles: const PosStyles(
+        align: PosAlign.center,
+        bold: true,
+        height: PosTextSize.size2,
+        width: PosTextSize.size2,
+      ),
+    ));
+    text.writeln(_center(title, paperSize));
+    bytes.addAll(generator.text(
+      station,
+      styles: const PosStyles(align: PosAlign.center, bold: true),
+    ));
+    text.writeln(_center(station, paperSize));
+  }
+
   void _appendItemNotes(
     Generator generator,
     List<int> bytes,
@@ -454,6 +482,12 @@ class PrinterRepositoryImpl implements PrinterRepository {
   /// para a cozinha saber quantas unidades preparar. Vazio para quantidade 1.
   String _choiceQtyPrefix(CartChoice choice) =>
       choice.quantity > 1 ? '${qty(choice.quantity)}x ' : '';
+
+  /// Indica se a escolha é um adicional (opção com acréscimo de preço > 0),
+  /// que na comanda recebe o marcador "++". Sabores/molhos (sem acréscimo)
+  /// usam o marcador padrão das demais escolhas.
+  bool _isAdditionalChoice(CartChoice choice) =>
+      choice.choiceType == 'option' && choice.priceAddition > 0;
 
   Future<Generator> _generator(PrinterPaperSize paperSize) async {
     final profile = await CapabilityProfile.load();

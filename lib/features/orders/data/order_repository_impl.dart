@@ -104,12 +104,26 @@ class OrderRepositoryImpl implements OrderRepository {
       );
 
   @override
-  Future<List<String>> checkStock(CartItem item) async {
-    final impact = await _dao.previewImpact([_toWrite(item)]);
+  Future<List<String>> checkStock(CartItem item) => checkStockForItems([item]);
+
+  @override
+  Future<List<String>> checkStockForItems(
+    List<CartItem> items, {
+    List<CartItem> replacing = const [],
+  }) async {
+    final impact = await _dao.previewImpact(items.map(_toWrite).toList());
+    final credit = replacing.isEmpty
+        ? const <int, double>{}
+        : await _dao.previewImpact(replacing.map(_toWrite).toList());
     final insufficient = <String>[];
     for (final entry in impact.entries) {
+      // Desconta do consumo necessário o que já estava reservado pelos itens
+      // sendo substituídos (estoque já abatido), para não acusar falta de algo
+      // que está apenas sendo realocado.
+      final needed = entry.value - (credit[entry.key] ?? 0);
+      if (needed <= 0) continue;
       final ingredient = await _productDao.getProduct(entry.key);
-      if (ingredient != null && ingredient.stockQuantity < entry.value) {
+      if (ingredient != null && ingredient.stockQuantity < needed) {
         insufficient.add(ingredient.name);
       }
     }
@@ -138,6 +152,9 @@ class OrderRepositoryImpl implements OrderRepository {
       confirm: confirm,
     );
   }
+
+  @override
+  Future<int> dailyOrderNumber(int orderId) => _dao.dailyOrderNumber(orderId);
 
   @override
   Future<OrderDetail> orderDetail(int orderId) async {
